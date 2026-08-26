@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "default_profile": "General Phase 3",
+  "profiles": {
+    "General Phase 3": {
+      "raid": "Any",
+      "priority": ["role_balance", "party_synergy", "critical_coverage"],
+      "notes": "General 25-player TBC Phase 3 readiness profile."
+    },
+    "Rage Winterchill": {"raid":"Battle for Mount Hyjal","priority":["role_balance","healing_stability","ranged_coverage"]},
+    "Anetheron": {"raid":"Battle for Mount Hyjal","priority":["role_balance","healing_stability","ranged_coverage"]},
+    "Kaz'rogal": {"raid":"Battle for Mount Hyjal","priority":["role_balance","mana_support","party_synergy"]},
+    "Azgalor": {"raid":"Battle for Mount Hyjal","priority":["role_balance","healing_stability","party_synergy"]},
+    "Archimonde": {"raid":"Battle for Mount Hyjal","priority":["role_balance","survivability","ranged_coverage","party_synergy"]},
+    "High Warlord Naj'entus": {"raid":"Black Temple","priority":["role_balance","healing_stability","critical_coverage"]},
+    "Supremus": {"raid":"Black Temple","priority":["role_balance","ranged_coverage","survivability"]},
+    "Shade of Akama": {"raid":"Black Temple","priority":["role_balance","damage_balance","party_synergy"]},
+    "Teron Gorefiend": {"raid":"Black Temple","priority":["role_balance","damage_balance","party_synergy"]},
+    "Gurtogg Bloodboil": {"raid":"Black Temple","priority":["role_balance","healing_stability","survivability"]},
+    "Reliquary of Souls": {"raid":"Black Temple","priority":["role_balance","healing_stability","damage_balance"]},
+    "Mother Shahraz": {"raid":"Black Temple","priority":["role_balance","survivability","healing_stability"]},
+    "The Illidari Council": {"raid":"Black Temple","priority":["role_balance","healing_stability","interrupt_coverage","party_synergy"]},
+    "Illidan Stormrage": {"raid":"Black Temple","priority":["role_balance","tank_depth","healing_stability","damage_balance","party_synergy"]}
+  },
+  "metric_definitions": {
+    "role_balance":"Evaluate Tank, Healer, Melee and Ranged counts against the TBC 25-player baseline.",
+    "party_synergy":"Evaluate five-person party placement and party-specific support.",
+    "critical_coverage":"Evaluate core class and utility coverage.",
+    "healing_stability":"Weight healer count and healer-support coverage more strongly.",
+    "ranged_coverage":"Weight ranged damage representation more strongly.",
+    "mana_support":"Weight mana-support specs and caster-party support more strongly.",
+    "survivability":"Reserve a hook for encounter-specific defensive/readiness checks.",
+    "damage_balance":"Compare melee and ranged representation for encounter planning.",
+    "interrupt_coverage":"Reserve a hook for reliable interrupt assignments.",
+    "tank_depth":"Weight tank coverage and specialist tank assignments more strongly."
+  }
+}
