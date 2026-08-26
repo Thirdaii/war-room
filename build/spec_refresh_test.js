@@ -1,0 +1,14 @@
+const fs=require('fs');
+global.window=global;
+global.CustomEvent=function(name,init){this.type=name;this.detail=init&&init.detail};
+global.dispatchEvent=()=>{};
+global.roster=[{name:'Thrall',class:'Shaman',spec:'Elemental',role:'Ranged'},{name:'Malfurion',class:'Druid',spec:'Balance',role:'Ranged'}];
+global.raid=['Thrall','Malfurion'];
+eval(fs.readFileSync(__dirname+'/spec_refresh.js','utf8'));
+const stamp=new Date().toISOString();
+const r=window.WarRoomSpecRefresh.apply([{name:'Thrall',activeSpec:'Enhancement',secondarySpec:'Restoration',updatedAt:stamp,source:'ClassicArmory'}]);
+if(r.updated.length!==1||r.updated[0]!=='Thrall')throw new Error('Spec refresh did not update matching roster character');
+if(global.roster[0].spec!=='Enhancement'||global.roster[0].secondarySpec!=='Restoration')throw new Error('Active/secondary spec update failed');
+if(global.roster[0].specUpdatedAt!==stamp||global.roster[0].specSource!=='ClassicArmory')throw new Error('Spec provenance update failed');
+if(window.WarRoomSpecRefresh.apply([{name:'Nobody',activeSpec:'Holy'}]).missing[0]!=='Nobody')throw new Error('Missing roster character tracking failed');
+console.log('Spec refresh bridge regression passed');

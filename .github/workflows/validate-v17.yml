@@ -1,7 +1,7 @@
-name: Validate War Room v1.7.2
+name: Validate War Room v1.7.3
 on:
   push:
-    branches: [war-room-v1.7.2-side-by-side-intelligence]
+    branches: [war-room-v1.7.3-spec-freshness]
   workflow_dispatch:
 permissions:
   contents: read
@@ -26,12 +26,17 @@ jobs:
         run: |
           python build/patch.py work/app
           python build/v17_integrate.py work/app
-      - name: Validate side-by-side layout and live raid binding
+      - name: Validate spec freshness and refresh bridge
         shell: pwsh
         run: |
-          python -c "import re,pathlib,json; p=pathlib.Path('work/app'); h=(p/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert json.loads((p/'version.json').read_text(encoding='utf-8'))['version']=='1.7.2'; assert h.count('/* War Room v1.7 - TBC Phase 3 Raid Intelligence */')==1; assert h.count('/* War Room v1.7 - live Raid Intelligence dashboard */')==1; assert 'wrRaidCommandDock' in h and 'wr-raid-command-dock' in h and 'wr-intel-sidecar' in h; assert 'typeof raid' in h and 'typeof roster' in h"
+          python -c "import re,pathlib,json; p=pathlib.Path('work/app'); h=(p/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert json.loads((p/'version.json').read_text(encoding='utf-8'))['version']=='1.7.3'; assert h.count('/* War Room v1.7 - TBC Phase 3 Raid Intelligence */')==1; assert h.count('/* War Room v1.7.3 - Spec Refresh Bridge */')==1; assert h.count('/* War Room v1.7 - live Raid Intelligence dashboard */')==1; assert 'SPEC DATA CONFIDENCE' in h and 'wrSpecMeta' in h and 'wrDataQuality' in h and 'WarRoomSpecRefresh' in h and 'wrRaidCommandDock' in h"
           node --check work/check.js
+          node --check build/raid_intelligence.js
+          node --check build/spec_refresh.js
+          node --check build/raid_intelligence_ui.js
           node build/raid_intelligence_test.js
+          node build/spec_freshness_test.js
+          node build/spec_refresh_test.js
       - name: Validate updater parser
         shell: pwsh
         run: |
