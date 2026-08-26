@@ -62,10 +62,12 @@ jobs:
         shell: pwsh
         run: |
           $icon = (Resolve-Path "work/app/assets/icons/WarRoom.ico").Path
+          $source = (Resolve-Path "build/WarRoomLauncher.cs").Path
+          $output = (Join-Path (Resolve-Path "work/app").Path "War Room.exe")
           $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
           if (-not (Test-Path $csc)) { throw "C# compiler not found: $csc" }
-          & $csc /nologo /target:winexe /optimize+ /reference:System.dll /reference:System.Windows.Forms.dll "/win32icon:$icon" "/out:work/app/War Room.exe" build/WarRoomLauncher.cs
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path "work/app/War Room.exe")) { throw "War Room.exe build failed." }
+          & $csc /nologo /target:winexe /optimize+ /reference:System.dll /reference:System.Windows.Forms.dll "/win32icon:$icon" "/out:$output" "$source"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $output)) { throw "War Room.exe build failed." }
 
       - name: Package
         shell: pwsh
