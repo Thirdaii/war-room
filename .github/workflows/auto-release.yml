@@ -2,58 +2,90 @@ name: Auto Publish War Room
 on:
   push:
     branches: [main]
-    paths: [build/version.txt, build/patch.py, .github/workflows/auto-release.yml]
+    paths:
+      - build/version.txt
+      - build/patch.py
+      - build/WarRoomLauncher.cs
+      - .github/workflows/auto-release.yml
   workflow_dispatch:
 permissions:
   contents: write
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
       - id: version
+        shell: pwsh
         run: |
-          VERSION="$(tr -d '[:space:]' < build/version.txt)"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          $version = (Get-Content build/version.txt -Raw).Trim()
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+
       - name: Download current base
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_TAG: ${{ steps.version.outputs.tag }}
         run: |
-          mkdir -p work/base work/app
-          BASE_TAG="$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 20 --json tagName --jq '[.[].tagName | select(. != env.TARGET_TAG)][0]')"
-          test -n "$BASE_TAG"
-          gh release download "$BASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern 'WarRoom-App.zip' --dir work/base
-          unzip -q work/base/WarRoom-App.zip -d work/app
-          if [ ! -f work/app/index.html ]; then NESTED="$(find work/app -mindepth 1 -maxdepth 1 -type d | head -n1)"; cp -a "$NESTED"/. work/app/; rm -rf "$NESTED"; fi
-          test -f work/app/index.html
+          New-Item -ItemType Directory -Force work/base,work/app | Out-Null
+          $releases = gh release list --repo $env:GITHUB_REPOSITORY --exclude-drafts --exclude-pre-releases --limit 20 --json tagName | ConvertFrom-Json
+          $baseTag = ($releases | Where-Object { $_.tagName -ne $env:TARGET_TAG } | Select-Object -First 1).tagName
+          if (-not $baseTag) { throw "No base War Room release found." }
+          gh release download $baseTag --repo $env:GITHUB_REPOSITORY --pattern "WarRoom-App.zip" --dir work/base
+          Expand-Archive -Path work/base/WarRoom-App.zip -DestinationPath work/app -Force
+          if (-not (Test-Path work/app/index.html)) {
+            $dirs = @(Get-ChildItem work/app -Directory)
+            if ($dirs.Count -eq 1) {
+              Copy-Item "$($dirs[0].FullName)\*" work/app -Recurse -Force
+              Remove-Item $dirs[0].FullName -Recurse -Force
+            }
+          }
+          if (-not (Test-Path work/app/index.html)) { throw "Base package did not contain index.html." }
+
       - name: Apply and validate upgrade
+        shell: pwsh
         run: |
-          python3 build/patch.py work/app
-          python3 - <<'PY'
-          import json,re
-          from pathlib import Path
-          r=Path('work/app'); expected=Path('build/version.txt').read_text().strip()
-          assert json.loads((r/'version.json').read_text())['version']==expected
-          h=(r/'index.html').read_text(); m=re.search(r'<script>(.*?)</script>',h,re.S); assert m
-          Path('work/check.js').write_text(m.group(1))
-          PY
+          python build/patch.py work/app
+          python -c "import json,re,pathlib; r=pathlib.Path('work/app'); expected=pathlib.Path('build/version.txt').read_text().strip(); assert json.loads((r/'version.json').read_text())['version']==expected; h=(r/'index.html').read_text(); m=re.search(r'<script>(.*?)</script>',h,re.S); assert m; pathlib.Path('work/check.js').write_text(m.group(1))"
           node --check work/check.js
-      - name: Package
+          powershell.exe -NoProfile -Command "$null=[System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'work/app/WarRoomUpdater.ps1'),[ref]$null,[ref]$null); if($error.Count){exit 1}"
+
+      - name: Build native War Room launcher
+        shell: pwsh
         run: |
-          rm -f work/app/WarRoomUpdater.log work/app/WarRoomLauncher.log
-          cd work/app && zip -qr ../WarRoom-App.zip . -x 'backups/*'
-          cd ../.. && unzip -l work/WarRoom-App.zip | grep -q index.html
+          $icon = Resolve-Path "work/app/assets/icons/WarRoom.ico"
+          $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          if (-not (Test-Path $csc)) { throw "C# compiler not found: $csc" }
+          & $csc /nologo /target:winexe /optimize+ /reference:System.dll /reference:System.Windows.Forms.dll /win32icon:"$icon" /out:"work/app/War Room.exe" build/WarRoomLauncher.cs
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path "work/app/War Room.exe")) { throw "War Room.exe build failed." }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Remove-Item work/app/WarRoomUpdater.log,work/app/WarRoomLauncher.log -ErrorAction SilentlyContinue
+          Remove-Item work/app/backups -Recurse -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path work/app/* -DestinationPath work/WarRoom-App.zip -Force
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip=[IO.Compression.ZipFile]::OpenRead((Resolve-Path 'work/WarRoom-App.zip'))
+          $names=$zip.Entries.FullName
+          $zip.Dispose()
+          if ($names -notcontains 'index.html') { throw 'Package missing index.html.' }
+          if ($names -notcontains 'War Room.exe') { throw 'Package missing War Room.exe.' }
+          if ($names -notcontains 'WarRoomUpdater.ps1') { throw 'Package missing updater.' }
+
       - name: Publish latest release
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" work/WarRoom-App.zip --repo "$GITHUB_REPOSITORY" --clobber
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "War Room v$VERSION" --latest
-          else
-            gh release create "$TAG" work/WarRoom-App.zip --repo "$GITHUB_REPOSITORY" --title "War Room v$VERSION" --generate-notes --latest
-          fi
+          gh release view $env:TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:TAG work/WarRoom-App.zip --repo $env:GITHUB_REPOSITORY --clobber
+            gh release edit $env:TAG --repo $env:GITHUB_REPOSITORY --title "War Room v$env:VERSION" --latest
+          } else {
+            gh release create $env:TAG work/WarRoom-App.zip --repo $env:GITHUB_REPOSITORY --title "War Room v$env:VERSION" --generate-notes --latest
+          }
