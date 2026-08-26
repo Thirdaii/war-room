@@ -1,0 +1,48 @@
+name: Validate War Room v1.7
+on:
+  push:
+    branches: [war-room-v1.7-raid-intelligence]
+    paths:
+      - build/raid_intelligence.js
+      - build/raid_intelligence_ui.js
+      - build/raid_intelligence.css
+      - build/v17_integrate.py
+      - build/tbc_phase3_rules.json
+      - .github/workflows/validate-v17.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download latest production base
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force work/base,work/app | Out-Null
+          $tag=(gh release view --repo $env:GITHUB_REPOSITORY --json tagName | ConvertFrom-Json).tagName
+          gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern "WarRoom-App.zip" --dir work/base
+          Expand-Archive -Path work/base/WarRoom-App.zip -DestinationPath work/app -Force
+          if (-not (Test-Path work/app/index.html)) {
+            $dirs=@(Get-ChildItem work/app -Directory)
+            if($dirs.Count -eq 1){ Copy-Item "$($dirs[0].FullName)\*" work/app -Recurse -Force; Remove-Item $dirs[0].FullName -Recurse -Force }
+          }
+          if(-not(Test-Path work/app/index.html)){ throw 'Production package missing index.html' }
+      - name: Apply v1.7 integration
+        shell: pwsh
+        run: |
+          python build/v17_integrate.py work/app
+      - name: Validate JavaScript and integration markers
+        shell: pwsh
+        run: |
+          python -c "import re,pathlib,json; p=pathlib.Path('work/app'); h=(p/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); assert s; pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert 'WarRoomRaidIntelligence' in h and 'wrRaidIntelLive' in h; assert json.loads((p/'version.json').read_text(encoding='utf-8'))['version']=='1.7.0'"
+          node --check work/check.js
+          node --check build/raid_intelligence.js
+          node --check build/raid_intelligence_ui.js
+      - name: Validate TBC rules
+        shell: pwsh
+        run: |
+          python -c "import json,pathlib; d=json.loads(pathlib.Path('build/tbc_phase3_rules.json').read_text(encoding='utf-8')); assert d['level_cap']==70; assert d['raid_size']==25; assert d['phase']==3; assert 'Illidan Stormrage' in d['raids']['Black Temple']['bosses']; assert 'Archimonde' in d['raids']['Battle for Mount Hyjal']['bosses']; assert len(d['tbc_specs'])==9"
