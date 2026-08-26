@@ -48,7 +48,7 @@ jobs:
         shell: pwsh
         run: |
           python build/patch.py work/app
-          python -c "import json,re,pathlib; r=pathlib.Path('work/app'); expected=pathlib.Path('build/version.txt').read_text().strip(); assert json.loads((r/'version.json').read_text())['version']==expected; h=(r/'index.html').read_text(); m=re.search(r'<script>(.*?)</script>',h,re.S); assert m; pathlib.Path('work/check.js').write_text(m.group(1))"
+          python -c "import json,re,pathlib; r=pathlib.Path('work/app'); expected=pathlib.Path('build/version.txt').read_text(encoding='utf-8').strip(); assert json.loads((r/'version.json').read_text(encoding='utf-8'))['version']==expected; h=(r/'index.html').read_text(encoding='utf-8'); m=re.search(r'<script>(.*?)</script>',h,re.S); assert m; pathlib.Path('work/check.js').write_text(m.group(1),encoding='utf-8')"
           node --check work/check.js
           $tokens=$null
           $parseErrors=$null
