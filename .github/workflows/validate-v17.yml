@@ -3,12 +3,15 @@ on:
   push:
     branches: [war-room-v1.7-raid-intelligence]
     paths:
+      - build/version.txt
+      - build/patch.py
       - build/raid_intelligence.js
       - build/raid_intelligence_ui.js
       - build/raid_intelligence.css
       - build/v17_integrate.py
       - build/tbc_phase3_rules.json
       - build/phase3_boss_profiles.json
+      - .github/workflows/auto-release.yml
       - .github/workflows/validate-v17.yml
   workflow_dispatch:
 permissions:
@@ -24,8 +27,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           New-Item -ItemType Directory -Force work/base,work/app | Out-Null
-          $tag=(gh release view --repo $env:GITHUB_REPOSITORY --json tagName | ConvertFrom-Json).tag_name
-          if(-not $tag){ $tag=(gh release view --repo $env:GITHUB_REPOSITORY --json tagName | ConvertFrom-Json).tagName }
+          $tag=(gh release view --repo $env:GITHUB_REPOSITORY --json tagName | ConvertFrom-Json).tagName
           gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern "WarRoom-App.zip" --dir work/base
           Expand-Archive -Path work/base/WarRoom-App.zip -DestinationPath work/app -Force
           if (-not (Test-Path work/app/index.html)) {
@@ -33,9 +35,10 @@ jobs:
             if($dirs.Count -eq 1){ Copy-Item "$($dirs[0].FullName)\*" work/app -Recurse -Force; Remove-Item $dirs[0].FullName -Recurse -Force }
           }
           if(-not(Test-Path work/app/index.html)){ throw 'Production package missing index.html' }
-      - name: Apply v1.7 integration
+      - name: Apply exact production upgrade path
         shell: pwsh
         run: |
+          python build/patch.py work/app
           python build/v17_integrate.py work/app
       - name: Validate JavaScript and integration markers
         shell: pwsh
@@ -48,3 +51,10 @@ jobs:
         shell: pwsh
         run: |
           python -c "import json,pathlib; d=json.loads(pathlib.Path('build/tbc_phase3_rules.json').read_text(encoding='utf-8')); b=json.loads(pathlib.Path('build/phase3_boss_profiles.json').read_text(encoding='utf-8')); assert d['level_cap']==70; assert d['raid_size']==25; assert d['phase']==3; assert 'Illidan Stormrage' in d['raids']['Black Temple']['bosses']; assert 'Archimonde' in d['raids']['Battle for Mount Hyjal']['bosses']; assert len(d['tbc_specs'])==9; assert len(b['profiles'])==15; assert b['profiles']['Illidan Stormrage']['raid']=='Black Temple'; assert b['profiles']['Archimonde']['raid']=='Battle for Mount Hyjal'"
+      - name: Validate updater parser
+        shell: pwsh
+        run: |
+          $tokens=$null
+          $parseErrors=$null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'work/app/WarRoomUpdater.ps1'),[ref]$tokens,[ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) { $parseErrors | ForEach-Object { Write-Error $_.Message }; throw 'Updater parser validation failed' }
