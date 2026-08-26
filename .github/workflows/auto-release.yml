@@ -1,0 +1,59 @@
+name: Auto Publish War Room
+on:
+  push:
+    branches: [main]
+    paths: [build/version.txt, build/patch.py, .github/workflows/auto-release.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        run: |
+          VERSION="$(tr -d '[:space:]' < build/version.txt)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Download current base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          mkdir -p work/base work/app
+          BASE_TAG="$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 20 --json tagName --jq '[.[].tagName | select(. != env.TARGET_TAG)][0]')"
+          test -n "$BASE_TAG"
+          gh release download "$BASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern 'WarRoom-App.zip' --dir work/base
+          unzip -q work/base/WarRoom-App.zip -d work/app
+          if [ ! -f work/app/index.html ]; then NESTED="$(find work/app -mindepth 1 -maxdepth 1 -type d | head -n1)"; cp -a "$NESTED"/. work/app/; rm -rf "$NESTED"; fi
+          test -f work/app/index.html
+      - name: Apply and validate upgrade
+        run: |
+          python3 build/patch.py work/app
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          r=Path('work/app'); expected=Path('build/version.txt').read_text().strip()
+          assert json.loads((r/'version.json').read_text())['version']==expected
+          h=(r/'index.html').read_text(); m=re.search(r'<script>(.*?)</script>',h,re.S); assert m
+          Path('work/check.js').write_text(m.group(1))
+          PY
+          node --check work/check.js
+      - name: Package
+        run: |
+          rm -f work/app/WarRoomUpdater.log work/app/WarRoomLauncher.log
+          cd work/app && zip -qr ../WarRoom-App.zip . -x 'backups/*'
+          cd ../.. && unzip -l work/WarRoom-App.zip | grep -q index.html
+      - name: Publish latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" work/WarRoom-App.zip --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "War Room v$VERSION" --latest
+          else
+            gh release create "$TAG" work/WarRoom-App.zip --repo "$GITHUB_REPOSITORY" --title "War Room v$VERSION" --generate-notes --latest
+          fi
