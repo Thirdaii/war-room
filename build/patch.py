@@ -1,14 +1,40 @@
 from pathlib import Path
-import json, re, sys
-root=Path(sys.argv[1]); index=root/'index.html'; vf=root/'version.json'; h=index.read_text(encoding='utf-8')
-css='''\n/* WAR ROOM v1.5 MAJOR CINEMATIC */\n.layout{grid-template-columns:190px minmax(0,1.7fr) minmax(410px,.62fr)!important;gap:5px!important}.wr-nav{border:1px solid #4f342a;background:linear-gradient(180deg,#160d0b,#080605);min-height:880px}.wr-nav-title{padding:9px 11px;background:linear-gradient(90deg,#41140f,#160d0b);color:#e3c17f;font-size:10px;font-weight:1000;text-transform:uppercase}.wr-nav-items{padding:5px}.wr-nav-btn{width:100%;min-height:58px;margin-bottom:4px;border:1px solid #3f2c25;background:linear-gradient(180deg,#1b130f,#0b0807);color:#bba999;display:flex;align-items:center;gap:9px;padding:8px 10px;font-size:9px;font-weight:900;text-align:left;text-transform:uppercase}.wr-nav-btn.active{border-color:#784235;background:linear-gradient(90deg,#551710,#1b0e0b);color:#f0d9bd;box-shadow:inset 3px 0 #d1a04e}.wr-nav-icon{width:26px;height:26px;display:grid;place-items:center;border:1px solid #50372e;background:#090706;color:#d4a456}.wr-nav-note{margin:8px 5px;padding:10px;border:1px solid #3a2922;color:#8f7c6e;font-size:8px}.builder{grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:4px!important}.group{min-height:430px!important}.role-filter-row{grid-template-columns:repeat(4,minmax(135px,1fr))!important;gap:6px!important}.role-filter-row .quick{min-height:50px!important}#showTanks{color:#FF7D0A!important}#showMelee{color:#C79C6E!important}#showRanged{color:#69CCF0!important}.wr-dossier-fixed{padding:8px;border-top:1px solid #3d2a23}.wr-dossier-portrait{min-height:260px;border:1px solid #5b3a2e;background:linear-gradient(180deg,rgba(8,6,5,.08),rgba(8,6,5,.58)),url("assets/images/right_art.jpg") center/cover no-repeat}.wr-dossier-name{font-size:19px;font-weight:1000;color:#e7d5c3}.wr-dossier-sub{color:#8d7b70;font-size:9px;text-transform:uppercase}.wr-dossier-metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:5px;margin-top:8px}.wr-dossier-metric{border:1px solid #3e2c25;background:#0c0908;padding:8px}.wr-dossier-metric b{display:block;font-size:15px;color:#e4d2bf}.bottom-command-grid{grid-template-columns:1.15fr .8fr 1fr 1fr!important}.motd-body{min-height:132px;padding:14px;display:flex;align-items:center;justify-content:center;text-align:center;color:#dfc29c;font-family:Georgia,serif}.hero{min-height:226px!important}.brand h1{font-size:56px!important}.pull-core .pull-main{font-size:62px!important}@media(max-width:1550px){.layout{grid-template-columns:160px 1fr!important}aside.panel{grid-column:1/-1!important}.builder{grid-template-columns:repeat(3,1fr)!important}}@media(max-width:1100px){.layout{grid-template-columns:1fr!important}.wr-nav{display:none}.builder{grid-template-columns:1fr!important}}\n'''
-if 'WAR ROOM v1.5 MAJOR CINEMATIC' not in h: h=h.replace('</style>',css+'</style>',1)
-nav='''<nav class="wr-nav"><div class="wr-nav-title">Command Modules</div><div class="wr-nav-items"><button class="wr-nav-btn active"><span class="wr-nav-icon">⚔</span>War Room</button><button class="wr-nav-btn" disabled><span class="wr-nav-icon">☷</span>Raid Roster</button><button class="wr-nav-btn" disabled><span class="wr-nav-icon">♜</span>Assignments</button><button class="wr-nav-btn" disabled><span class="wr-nav-icon">✦</span>Strategy</button><button class="wr-nav-btn" disabled><span class="wr-nav-icon">◇</span>Gear Check</button><button class="wr-nav-btn" disabled><span class="wr-nav-icon">✹</span>Consumables</button><button class="wr-nav-btn" disabled><span class="wr-nav-icon">▦</span>Calendar</button><button class="wr-nav-btn" disabled><span class="wr-nav-icon">▤</span>Logs</button></div><div class="wr-nav-note">Strength is earned. Honor is remembered. The Horde prevails.</div></nav>'''
-if 'class="wr-nav"' not in h: h=h.replace('<div class="layout">\n    <section class="panel">','<div class="layout">\n'+nav+'\n<section class="panel">',1)
-d='''<div class="wr-dossier-fixed"><div class="wr-dossier-portrait"></div><div class="wr-dossier-name" id="fixedDossierName">Select a Raider</div><div class="wr-dossier-sub" id="fixedDossierSub">Inspect a character to populate this dossier</div><div class="wr-dossier-metrics"><div class="wr-dossier-metric"><b id="fixedGS">—</b> GearScore</div><div class="wr-dossier-metric"><b id="fixedIlvl">—</b> iLvl</div><div class="wr-dossier-metric"><b id="fixedRole">TBD</b> Role</div><div class="wr-dossier-metric"><b id="fixedAttend">Unset</b> Attendance</div></div></div>'''
-if 'class="wr-dossier-fixed"' not in h: h=h.replace('<div class="role-summary">',d+'<div class="role-summary">',1)
-m='''<section class="bottom-panel"><div class="bottom-head">Guild Message of the Day</div><div class="motd-body">We fight together.<br>We bleed together.<br>We get legends together.<br><br><b>FOR THE HORDE!</b></div></section>'''
-if 'Guild Message of the Day' not in h: h=h.replace('<section class="warroom-doctrine">',m+'<section class="warroom-doctrine">',1)
-h=h.replace('$("#dPreviewName").textContent=p.name;','$("#dPreviewName").textContent=p.name; if($("#fixedDossierName"))$("#fixedDossierName").textContent=p.name; if($("#fixedDossierSub"))$("#fixedDossierSub").textContent=`${p.class} • ${p.race} • ${p.rank}`; if($("#fixedGS"))$("#fixedGS").textContent=p.gearscore||"—"; if($("#fixedIlvl"))$("#fixedIlvl").textContent=p.ilvl||"—"; if($("#fixedRole"))$("#fixedRole").textContent=p.role||"TBD";',1)
-h=re.sub(r'<strong>WAR ROOM APP • [^<]+</strong>','<strong>WAR ROOM APP • MAJOR CINEMATIC BUILD 1.5</strong>',h,count=1)
-index.write_text(h,encoding='utf-8'); v=json.loads(vf.read_text(encoding='utf-8')); v['version']='1.5.0'; v['notes']=['Major cinematic redesign','Command module sidebar','Persistent raider dossier','Expanded raid composition and intelligence panels']; vf.write_text(json.dumps(v,indent=2),encoding='utf-8')
+import json,re,sys
+root=Path(sys.argv[1]); index=root/'index.html'; vf=root/'version.json'; updater=root/'WarRoomUpdater.ps1'
+h=index.read_text(encoding='utf-8')
+# Keep the v1.5 cinematic UI already present in the base package.
+# Repair updater by replacing the fragile splash-injected implementation with a clean parser-safe updater.
+ps=r'''param([switch]$SkipUpdate)
+$ErrorActionPreference = "Stop"
+$AppRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoOwner = "Thirdaii"
+$RepoName = "war-room"
+$AssetName = "WarRoom-App.zip"
+$VersionFile = Join-Path $AppRoot "version.json"
+$IndexFile = Join-Path $AppRoot "index.html"
+$LogFile = Join-Path $AppRoot "WarRoomUpdater.log"
+function Log([string]$m){ Add-Content -Path $LogFile -Value ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"),$m) }
+function Status([string]$m){ Write-Host "[WAR ROOM] $m" -ForegroundColor DarkRed; Log $m }
+function Get-LocalVersion { try { if(Test-Path $VersionFile){ $v=Get-Content $VersionFile -Raw|ConvertFrom-Json; if($v.version){return [version]$v.version} } } catch { Log ("Version read failed: "+$_.Exception.Message) }; return [version]"0.0.0" }
+function Start-WarRoom { if(-not(Test-Path $IndexFile)){throw "index.html not found"}; Status "Opening the War Room..."; $launcher=Join-Path $AppRoot "LaunchAppWindow.ps1"; if(Test-Path $launcher){ & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $launcher -IndexFile $IndexFile; if($LASTEXITCODE -ne 0){throw "App launcher exited with code $LASTEXITCODE"} } else { Start-Process $IndexFile } }
+try {
+ Log "----- updater start -----"
+ if($SkipUpdate){Start-WarRoom;exit 0}
+ $localVersion=Get-LocalVersion; Status "Installed version: $localVersion"; Status "Checking GitHub for updates..."
+ $headers=@{ "User-Agent"="Me-Not-That-Kind-Of-Orc-War-Room"; "Accept"="application/vnd.github+json"; "X-GitHub-Api-Version"="2022-11-28" }
+ $release=Invoke-RestMethod -Uri "https://api.github.com/repos/$RepoOwner/$RepoName/releases/latest" -Headers $headers -Method Get -TimeoutSec 20
+ $remoteVersion=[version]([string]$release.tag_name).TrimStart("v","V"); Status "Latest GitHub version: $remoteVersion"
+ if($remoteVersion -le $localVersion){Status "War Room is up to date.";Start-WarRoom;exit 0}
+ $asset=$release.assets|Where-Object{$_.name -eq $AssetName}|Select-Object -First 1; if(-not $asset){throw "Required release asset $AssetName not found"}
+ Status "Update found: $localVersion -> $remoteVersion"
+ $tempRoot=Join-Path $env:TEMP ("WarRoomUpdate_"+[guid]::NewGuid().ToString("N"));$zipPath=Join-Path $tempRoot $AssetName;$extractPath=Join-Path $tempRoot "extract";New-Item -ItemType Directory -Path $extractPath -Force|Out-Null
+ Status "Downloading update...";Invoke-WebRequest -Uri $asset.browser_download_url -Headers $headers -OutFile $zipPath -UseBasicParsing -TimeoutSec 90
+ Status "Extracting update...";Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+ $source=$extractPath;$children=@(Get-ChildItem $extractPath);if($children.Count -eq 1 -and $children[0].PSIsContainer){$source=$children[0].FullName};if(-not(Test-Path(Join-Path $source "index.html"))){throw "Downloaded update missing index.html"}
+ Status "Installing update...";Get-ChildItem $source -Force|ForEach-Object{$dest=Join-Path $AppRoot $_.Name;if($_.PSIsContainer){if(-not(Test-Path $dest)){New-Item -ItemType Directory -Path $dest -Force|Out-Null};Copy-Item (Join-Path $_.FullName "*") $dest -Recurse -Force}else{Copy-Item $_.FullName $dest -Force}}
+ Remove-Item $tempRoot -Recurse -Force -ErrorAction SilentlyContinue;Status "Update installed successfully.";Start-WarRoom;exit 0
+} catch { Log ("ERROR: "+$_.Exception.Message);Write-Host ("[WAR ROOM] Updater error: "+$_.Exception.Message) -ForegroundColor Red;try{Start-WarRoom;exit 0}catch{Log ("FALLBACK LAUNCH ERROR: "+$_.Exception.Message);exit 1} }
+'''
+updater.write_text(ps,encoding='utf-8-sig')
+v=json.loads(vf.read_text(encoding='utf-8'));v['version']='1.5.1';v['notes']=['Hotfix: repaired PowerShell updater parser','Preserved dedicated Edge/Chrome app-mode launcher','Automatic GitHub update pipeline retained','v1.5 cinematic interface retained'];vf.write_text(json.dumps(v,indent=2),encoding='utf-8')
+index.write_text(h,encoding='utf-8')
