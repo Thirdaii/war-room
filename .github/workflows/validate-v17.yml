@@ -23,16 +23,7 @@ jobs:
           if(-not(Test-Path work/app/index.html)){ throw 'Production package missing index.html' }
       - name: Diagnose real raid state
         shell: pwsh
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-          h=Path('work/app/index.html').read_text(encoding='utf-8')
-          for pat in [r'(?:const|let|var)\s+\w+\s*=\s*\[',r'function\s+renderRaid\s*\([^)]*\)\s*\{',r'function\s+assign\w*\s*\([^)]*\)\s*\{',r'function\s+move\w*\s*\([^)]*\)\s*\{']:
-              for m in re.finditer(pat,h):
-                  print('\n---MATCH---')
-                  print(h[max(0,m.start()-500):min(len(h),m.start()+3500)])
-          PY
+        run: python build/diagnose_state.py
       - name: Apply exact production upgrade path
         shell: pwsh
         run: |
@@ -41,7 +32,7 @@ jobs:
       - name: Validate scripts and updater
         shell: pwsh
         run: |
-          python -c "import re,pathlib; h=pathlib.Path('work/app/index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8')"
+          python -c "import re,pathlib,json; p=pathlib.Path('work/app'); h=(p/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert json.loads((p/'version.json').read_text(encoding='utf-8'))['version']=='1.7.1'; assert h.count('/* War Room v1.7 - TBC Phase 3 Raid Intelligence */')==1; assert h.count('/* War Room v1.7 - live Raid Intelligence dashboard */')==1"
           node --check work/check.js
           node build/raid_intelligence_test.js
           $tokens=$null; $parseErrors=$null
