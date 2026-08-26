@@ -1,53 +1,16 @@
 /* War Room v1.7 - TBC Phase 3 Raid Intelligence */
 const TBC_PHASE3={raidSize:25,groupSize:5,targets:{Tank:{min:2,max:4},Healer:{min:5,max:8},Melee:{min:4,max:10},Ranged:{min:7,max:14}}};
-const SPEC_SYNERGY={
-  Shaman:{Enhancement:['Melee'],Elemental:['Ranged'],Restoration:['Healer','Ranged']},
-  Druid:{Feral:['Melee','Tank'],Balance:['Ranged'],Restoration:['Healer']},
-  Hunter:{'Beast Mastery':['Ranged'],Marksmanship:['Ranged'],Survival:['Ranged']},
-  Paladin:{Holy:['Healer'],Protection:['Tank'],Retribution:['Melee']},
-  Priest:{Discipline:['Healer'],Holy:['Healer'],Shadow:['Ranged']},
-  Warrior:{Arms:['Melee'],Fury:['Melee'],Protection:['Tank']},
-  Rogue:{Assassination:['Melee'],Combat:['Melee'],Subtlety:['Melee']},
-  Mage:{Arcane:['Ranged'],Fire:['Ranged'],Frost:['Ranged']},
-  Warlock:{Affliction:['Ranged'],Demonology:['Ranged'],Destruction:['Ranged']}
+const SPEC_SYNERGY={Shaman:{Enhancement:['Melee'],Elemental:['Ranged'],Restoration:['Healer','Ranged']},Druid:{Feral:['Melee','Tank'],Balance:['Ranged'],Restoration:['Healer']},Hunter:{'Beast Mastery':['Ranged'],Marksmanship:['Ranged'],Survival:['Ranged']},Mage:{Arcane:['Ranged'],Fire:['Ranged'],Frost:['Ranged']},Paladin:{Holy:['Healer'],Protection:['Tank'],Retribution:['Melee']},Priest:{Discipline:['Healer'],Holy:['Healer'],Shadow:['Ranged']},Rogue:{Assassination:['Melee'],Combat:['Melee'],Subtlety:['Melee']},Warlock:{Affliction:['Ranged'],Demonology:['Ranged'],Destruction:['Ranged']},Warrior:{Arms:['Melee'],Fury:['Melee'],Protection:['Tank']}};
+const WR_ENCOUNTERS={
+ 'Black Temple':{'Mother Shahraz':{survivability:1.35,healing:1.15},'The Illidari Council':{utility:1.35,healing:1.1},'Illidan Stormrage':{tanks:1.35,healing:1.2,utility:1.25,damage:1.1}},
+ 'Battle for Mount Hyjal':{'Archimonde':{survivability:1.4,healing:1.15,damage:1.05}}
 };
-function wrNorm(v){return String(v||'').trim();}
-function wrRole(p){return wrNorm(p.role)||'Unknown';}
-function wrSpec(p){return wrNorm(p.spec||p.talentSpec||p.build);}
-function wrClass(p){return wrNorm(p.class);}
-function wrRaidPlayers(){
-  if(!Array.isArray(window.raid))return [];
-  return window.raid.flatMap((g,gi)=>(Array.isArray(g)?g:[]).filter(Boolean).map(p=>({...p,_group:gi+1})));
-}
-function wrCountByRole(players){return players.reduce((a,p)=>{let r=wrRole(p);a[r]=(a[r]||0)+1;return a;},{});}
-function wrPartyAnalysis(players){
-  const groups=[1,2,3,4,5].map(n=>({group:n,players:players.filter(p=>p._group===n)}));
-  return groups.map(g=>{
-    const roles=wrCountByRole(g.players), shamans=g.players.filter(p=>wrClass(p)==='Shaman'), notes=[];
-    if(g.players.length<5)notes.push(`${5-g.players.length} open slot${5-g.players.length===1?'':'s'}`);
-    if(g.players.length===5 && !shamans.length)notes.push('No Shaman party support');
-    const melee=(roles.Melee||0)+(roles.Tank||0), ranged=(roles.Ranged||0)+(roles.Healer||0);
-    shamans.forEach(s=>{let sp=wrSpec(s);if(sp==='Enhancement'&&melee<3)notes.push('Enhancement Shaman has low melee value in this party');if(sp==='Elemental'&&(roles.Ranged||0)<2)notes.push('Elemental Shaman has low caster value in this party');});
-    return {...g,roles,notes};
-  });
-}
-function wrCoverage(players){
-  const classes=new Set(players.map(wrClass)), specs=new Set(players.map(p=>`${wrClass(p)}:${wrSpec(p)}`));
-  return [
-    ['Paladin Blessings',classes.has('Paladin')],['Power Word: Fortitude',classes.has('Priest')],['Mark of the Wild',classes.has('Druid')],['Arcane Intellect',classes.has('Mage')],['Healthstones',classes.has('Warlock')],['Shaman Party Support',classes.has('Shaman')],['Bloodlust / Heroism',classes.has('Shaman')],['Shadow Priest Mana Support',specs.has('Priest:Shadow')],['Totem of Wrath',specs.has('Shaman:Elemental')],['Windfury / Melee Totems',specs.has('Shaman:Enhancement')]
-  ].map(([name,ok])=>({name,ok}));
-}
-function wrRaidIntelligence(){
-  const players=wrRaidPlayers(),roles=wrCountByRole(players),parties=wrPartyAnalysis(players),coverage=wrCoverage(players),warnings=[],recommendations=[];
-  if(players.length<25)warnings.push(`Raid is ${25-players.length} player${25-players.length===24?'':'s'} short of 25.`);
-  if((roles.Tank||0)<2)warnings.push('Tank coverage is below the normal 25-player baseline.');
-  if((roles.Healer||0)<5)warnings.push('Healing coverage is below the normal 25-player baseline.');
-  if(!players.some(p=>wrClass(p)==='Shaman'))warnings.push('No Shaman assigned: major TBC party utility is missing.');
-  parties.forEach(g=>g.notes.forEach(n=>warnings.push(`Group ${g.group}: ${n}`)));
-  const missing=coverage.filter(x=>!x.ok);missing.forEach(x=>warnings.push(`Missing coverage: ${x.name}`));
-  parties.forEach(g=>{if(g.players.length===5&&!g.players.some(p=>wrClass(p)==='Shaman'))recommendations.push(`Consider a Shaman in Group ${g.group} for TBC party-specific support.`);});
-  const filled=Math.min(players.length/25,1), roleHealth=Math.min(((roles.Tank||0)>=2?1:0)+((roles.Healer||0)>=5?1:0)+((roles.Ranged||0)>=7?1:0),3)/3, coverageHealth=coverage.filter(x=>x.ok).length/coverage.length;
-  const score=Math.round((filled*.40+roleHealth*.30+coverageHealth*.30)*100);
-  return {score,players,roles,parties,coverage,warnings,recommendations};
-}
-window.WarRoomRaidIntelligence={analyze:wrRaidIntelligence,rules:TBC_PHASE3,specSynergy:SPEC_SYNERGY};
+function wrNorm(v){return String(v||'').trim()} function wrRole(p){return wrNorm(p.role)||'Unknown'} function wrSpec(p){return wrNorm(p.spec||p.talentSpec||p.build)} function wrClass(p){return wrNorm(p.class)}
+function wrRaidPlayers(){if(!Array.isArray(window.raid))return[];return window.raid.flatMap((g,gi)=>(Array.isArray(g)?g:[]).filter(Boolean).map(p=>({...p,_group:gi+1})))}
+function wrCountByRole(ps){return ps.reduce((a,p)=>{let r=wrRole(p);a[r]=(a[r]||0)+1;return a},{})}
+function wrPartyAnalysis(ps){return[1,2,3,4,5].map(n=>{let players=ps.filter(p=>p._group===n),roles=wrCountByRole(players),shamans=players.filter(p=>wrClass(p)==='Shaman'),notes=[];if(players.length<5)notes.push(`${5-players.length} open slot${5-players.length===1?'':'s'}`);if(players.length===5&&!shamans.length)notes.push('No Shaman party support');let melee=(roles.Melee||0)+(roles.Tank||0);shamans.forEach(s=>{let sp=wrSpec(s);if(sp==='Enhancement'&&melee<3)notes.push('Enhancement Shaman has low melee value in this party');if(sp==='Elemental'&&(roles.Ranged||0)<2)notes.push('Elemental Shaman has low caster value in this party')});return{group:n,players,roles,notes}})}
+function wrCoverage(ps){let c=new Set(ps.map(wrClass)),s=new Set(ps.map(p=>`${wrClass(p)}:${wrSpec(p)}`));return[['Paladin Blessings',c.has('Paladin')],['Power Word: Fortitude',c.has('Priest')],['Mark of the Wild',c.has('Druid')],['Arcane Intellect',c.has('Mage')],['Healthstones',c.has('Warlock')],['Shaman Party Support',c.has('Shaman')],['Bloodlust / Heroism',c.has('Shaman')],['Shadow Priest Mana Support',s.has('Priest:Shadow')],['Totem of Wrath',s.has('Shaman:Elemental')],['Windfury / Melee Totems',s.has('Shaman:Enhancement')]].map(([name,ok])=>({name,ok}))}
+function wrEncounter(){let raid=window.wrSelectedRaid||'Black Temple',boss=window.wrSelectedBoss||'Illidan Stormrage';return{raid,boss,weights:(WR_ENCOUNTERS[raid]||{})[boss]||{}}}
+function wrSwapIdeas(parties){let out=[];for(let a of parties)for(let b of parties){if(a.group>=b.group)continue;let enh=a.players.find(p=>wrClass(p)==='Shaman'&&wrSpec(p)==='Enhancement'),elem=a.players.find(p=>wrClass(p)==='Shaman'&&wrSpec(p)==='Elemental');let bM=(b.roles.Melee||0)+(b.roles.Tank||0),bR=b.roles.Ranged||0;if(enh&&bM>=3)out.push(`Move ${enh.name||'Enhancement Shaman'} from Group ${a.group} toward Group ${b.group} to strengthen melee synergy.`);if(elem&&bR>=2)out.push(`Move ${elem.name||'Elemental Shaman'} from Group ${a.group} toward Group ${b.group} to strengthen caster synergy.`)}return[...new Set(out)].slice(0,4)}
+function wrRaidIntelligence(){let players=wrRaidPlayers(),roles=wrCountByRole(players),parties=wrPartyAnalysis(players),coverage=wrCoverage(players),warnings=[],recommendations=[],encounter=wrEncounter();if(players.length<25)warnings.push(`Raid is ${25-players.length} player${25-players.length===1?'':'s'} short of 25.`);if((roles.Tank||0)<2)warnings.push('Tank coverage is below the normal 25-player baseline.');if((roles.Healer||0)<5)warnings.push('Healing coverage is below the normal 25-player baseline.');parties.forEach(g=>g.notes.forEach(n=>warnings.push(`Group ${g.group}: ${n}`)));coverage.filter(x=>!x.ok).forEach(x=>warnings.push(`Missing coverage: ${x.name}`));recommendations.push(...wrSwapIdeas(parties));let filled=Math.min(players.length/25,1),roleHealth=Math.min(((roles.Tank||0)>=2?1:0)+((roles.Healer||0)>=5?1:0)+((roles.Ranged||0)>=7?1:0),3)/3,coverageHealth=coverage.filter(x=>x.ok).length/coverage.length,base=filled*.4+roleHealth*.3+coverageHealth*.3;let modifier=1;if(encounter.weights.tanks&&((roles.Tank||0)<3))modifier-=.04*(encounter.weights.tanks-1);if(encounter.weights.healing&&((roles.Healer||0)<6))modifier-=.05*(encounter.weights.healing-1);if(encounter.weights.utility&&coverageHealth<.8)modifier-=.08*(encounter.weights.utility-1);let score=Math.max(0,Math.min(100,Math.round(base*modifier*100)));return{score,players,roles,parties,coverage,warnings,recommendations,encounter}}
+window.WarRoomRaidIntelligence={analyze:wrRaidIntelligence,rules:TBC_PHASE3,specSynergy:SPEC_SYNERGY,encounters:WR_ENCOUNTERS,setEncounter:(raid,boss)=>{window.wrSelectedRaid=raid;window.wrSelectedBoss=boss;if(window.renderRaidIntelligence)window.renderRaidIntelligence()}};
