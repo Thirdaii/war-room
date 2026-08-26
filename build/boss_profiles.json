@@ -1,0 +1,21 @@
+{
+  "Black Temple": {
+    "High Warlord Naj'entus": {"tags":["raid_damage","healing_check"],"weights":{"healing":1.2,"survivability":1.1}},
+    "Supremus": {"tags":["movement","tank_control"],"weights":{"tanks":1.15,"ranged":1.05}},
+    "Shade of Akama": {"tags":["adds","burst"],"weights":{"melee":1.05,"ranged":1.05}},
+    "Teron Gorefiend": {"tags":["execution","single_target"],"weights":{"damage":1.15}},
+    "Gurtogg Bloodboil": {"tags":["tank_rotation","healing_check"],"weights":{"tanks":1.2,"healing":1.2}},
+    "Reliquary of Souls": {"tags":["interrupts","resource_pressure","execution"],"weights":{"melee":1.1,"utility":1.2}},
+    "Mother Shahraz": {"tags":["survivability","positioning"],"weights":{"survivability":1.35,"healing":1.15}},
+    "The Illidari Council": {"tags":["interrupts","control","multi_target"],"weights":{"utility":1.35,"healing":1.1}},
+    "Illidan Stormrage": {"tags":["multi_phase","tank_specialization","fire_resistance_assignment","execution"],"weights":{"tanks":1.35,"healing":1.2,"utility":1.25,"damage":1.1}}
+  },
+  "Battle for Mount Hyjal": {
+    "Rage Winterchill": {"tags":["healing","movement"],"weights":{"healing":1.1}},
+    "Anetheron": {"tags":["adds","healing"],"weights":{"ranged":1.1,"healing":1.15}},
+    "Kaz'rogal": {"tags":["resource_pressure","execution"],"weights":{"utility":1.15,"damage":1.1}},
+    "Azgalor": {"tags":["adds","tank_control","survivability"],"weights":{"tanks":1.15,"survivability":1.15}},
+    "Archimonde": {"tags":["survivability","movement","execution"],"weights":{"survivability":1.4,"healing":1.15,"damage":1.05}}
+  },
+  "note":"Encounter weights are War Room planning heuristics, not guarantees or substitutes for raid-leader judgment."
+}
