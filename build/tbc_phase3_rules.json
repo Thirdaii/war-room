@@ -1,0 +1,55 @@
+{
+  "ruleset": "TBC Phase 3 Raid Intelligence",
+  "level_cap": 70,
+  "raid_size": 25,
+  "phase": 3,
+  "raids": {
+    "Black Temple": {
+      "bosses": ["High Warlord Naj'entus", "Supremus", "Shade of Akama", "Teron Gorefiend", "Gurtogg Bloodboil", "Reliquary of Souls", "Mother Shahraz", "The Illidari Council", "Illidan Stormrage"]
+    },
+    "Battle for Mount Hyjal": {
+      "bosses": ["Rage Winterchill", "Anetheron", "Kaz'rogal", "Azgalor", "Archimonde"]
+    }
+  },
+  "roles": ["Tank", "Healer", "Melee", "Ranged"],
+  "classes": ["Druid", "Hunter", "Mage", "Paladin", "Priest", "Rogue", "Shaman", "Warlock", "Warrior"],
+  "tbc_specs": {
+    "Druid": ["Balance", "Feral", "Restoration"],
+    "Hunter": ["Beast Mastery", "Marksmanship", "Survival"],
+    "Mage": ["Arcane", "Fire", "Frost"],
+    "Paladin": ["Holy", "Protection", "Retribution"],
+    "Priest": ["Discipline", "Holy", "Shadow"],
+    "Rogue": ["Assassination", "Combat", "Subtlety"],
+    "Shaman": ["Elemental", "Enhancement", "Restoration"],
+    "Warlock": ["Affliction", "Demonology", "Destruction"],
+    "Warrior": ["Arms", "Fury", "Protection"]
+  },
+  "party_sensitive_effects": [
+    "Bloodlust/Heroism",
+    "Windfury Totem",
+    "Grace of Air Totem",
+    "Wrath of Air Totem",
+    "Mana Spring Totem",
+    "Mana Tide Totem",
+    "Totem of Wrath",
+    "Trueshot Aura",
+    "Leader of the Pack",
+    "Moonkin Aura",
+    "Vampiric Touch"
+  ],
+  "raid_coverage_checks": [
+    "Paladin blessings",
+    "Priest stamina",
+    "Druid Mark of the Wild",
+    "Mage Arcane Intellect",
+    "Warlock healthstones",
+    "Hunter utility",
+    "Shaman party support"
+  ],
+  "design_notes": [
+    "Use TBC-era party composition logic rather than modern raid-wide assumptions.",
+    "Do not infer a character's talent specialization from class alone.",
+    "Boss-specific recommendations must be separately encoded and explainable.",
+    "Treat five groups of five as the primary raid-composition model."
+  ]
+}
