@@ -8,6 +8,7 @@ on:
       - build/raid_intelligence.js
       - build/raid_intelligence_ui.js
       - build/raid_intelligence.css
+      - build/raid_intelligence_test.js
       - build/v17_integrate.py
       - build/tbc_phase3_rules.json
       - build/phase3_boss_profiles.json
@@ -47,6 +48,10 @@ jobs:
           node --check work/check.js
           node --check build/raid_intelligence.js
           node --check build/raid_intelligence_ui.js
+      - name: Run Raid Intelligence behavior regression
+        shell: pwsh
+        run: |
+          node build/raid_intelligence_test.js
       - name: Validate TBC Phase 3 rules and boss profiles
         shell: pwsh
         run: |
