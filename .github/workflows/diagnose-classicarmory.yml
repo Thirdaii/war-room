@@ -10,30 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect alternate armory payload
+      - name: Trace alternate armory API route
         run: |
           set -e
-          url='https://classicarmory.gg/character/us/dreamscythe/misanthropi?ns=classicann'
-          curl -LfsS -A 'Mozilla/5.0' "$url" -o work.html
-          python - <<'PY'
-          from pathlib import Path
-          import re,html
-          t=Path('work.html').read_text(encoding='utf-8',errors='ignore')
-          print('TITLE:',(re.search(r'<title>(.*?)</title>',t,re.S) or [None,''])[1])
-          print('LENGTH:',len(t))
-          keys=['item level','gearscore','specialization','spec','talent','equipment','equipped','itemLevel','averageItemLevel','specializations','active_spec','activeSpec']
-          low=t.lower()
-          for k in keys:
-              print('\n===',k,'===')
-              start=0;shown=0
-              while shown<6:
-                  i=low.find(k.lower(),start)
-                  if i<0: break
-                  print(html.unescape(t[max(0,i-220):i+520]).replace('\n',' ')[:900])
-                  start=i+len(k);shown+=1
-          print('\n=== JSON/SCRIPT HINTS ===')
-          for m in re.finditer(r'<script[^>]*>([\s\S]*?)</script>',t,re.I):
-              s=m.group(1)
-              if any(k in s.lower() for k in ('misanthropi','itemlevel','specialization','equipment','talent')):
-                  print(s[:5000])
-          PY
+          curl -LfsS -A 'Mozilla/5.0' 'https://classicarmory.gg/character/us/dreamscythe/misanthropi?ns=classicann' -o work.html
+          js=$(grep -oE 'src="/assets/index-[^"]+\.js"' work.html | head -n1 | cut -d'"' -f2)
+          echo "BUNDLE: $js"
+          curl -LfsS -A 'Mozilla/5.0' "https://classicarmory.gg$js" -o work.js
+          echo '=== endpoint hints ==='
+          grep -oE '.{0,180}(https?://[^"'"'"' ]+|/api/[^"'"'"' ]+|character[^"'"'"' ]{0,120}|equipment[^"'"'"' ]{0,120}|specialization[^"'"'"' ]{0,120}|talent[^"'"'"' ]{0,120}).{0,220}' work.js | head -n 250 || true
+          echo '=== fetch/axios hints ==='
+          grep -oE '.{0,220}(fetch\(|axios|baseURL|api\.battle|api/character|profile/wow).{0,260}' work.js | head -n 200 || true
