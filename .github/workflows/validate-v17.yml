@@ -1,7 +1,7 @@
-name: Validate War Room v1.7.24
+name: Validate War Room v1.7.25
 on:
   push:
-    branches: [war-room-v1.7.24-wow-item-tooltips]
+    branches: [war-room-v1.7.25-live-gems-enchants]
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,31 +20,34 @@ jobs:
           gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern "WarRoom-App.zip" --dir work/base
           Expand-Archive work/base/WarRoom-App.zip work/app -Force
           if(-not(Test-Path work/app/index.html)){ $d=@(Get-ChildItem work/app -Directory); if($d.Count -eq 1){Copy-Item "$($d[0].FullName)\*" work/app -Recurse -Force} }
-      - name: Apply production upgrade
+      - name: Apply v1.7.25 production upgrade
         shell: pwsh
         run: |
           python build/patch.py work/app
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           python build/v17_integrate.py work/app
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-      - name: Validate WoW item tooltip and gear regression
+      - name: Validate live gems enchantments and tooltip regression
         shell: pwsh
         run: |
           $h=Get-Content work/app/index.html -Raw
           $v=Get-Content work/app/version.json -Raw | ConvertFrom-Json
-          if($v.version -ne '1.7.24'){throw 'Package version is not 1.7.24'}
-          $required=@('War Room v1.7.24 - WoW-style item hover tooltips','wr-wow-tooltip','bindTooltip','tooltipHtml','positionTooltip','mouseenter','mousemove','mouseleave','Item Level','qualityColor','directSlotLabels','found.length===1','wr-live-item-icon','/item-icon?id=','WarRoomInspectLive')
-          foreach($x in $required){if(-not $h.Contains($x)){throw "Missing tooltip/gear marker: $x"}}
+          if($v.version -ne '1.7.25'){throw 'Package version is not 1.7.25'}
+          $required=@('War Room v1.7.25 - Live gems and enchantments in WoW tooltips','War Room v1.7.25 - Live gem and enchantment normalization','wr-wow-tooltip','resolveLive','enrichLiveItem',"resolveLive('gem'","resolveLive('enchantment'",'gemHtml','Enchant:','gemCache','enchantmentCache','directSlotLabels','found.length===1','wr-live-item-icon','/item-icon?id=','WarRoomInspectLive')
+          foreach($x in $required){if(-not $h.Contains($x)){throw "Missing v1.7.25 marker: $x"}}
           if($h.Contains('txt.includes')){throw 'Legacy whole-matrix selector returned'}
           python -c "import re,pathlib; h=pathlib.Path('work/app/index.html').read_text(encoding='utf-8'); pathlib.Path('work/check.js').write_text(chr(10).join(re.findall(r'<script>(.*?)</script>',h,re.S)),encoding='utf-8')"
           node --check work/check.js
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           node --check build/inspect_graphics.js
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-      - name: Preserve persistent launcher and icon proxy
+          node --check build/armory_refresh_adapter.js
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+      - name: Validate native gem and enchantment resolvers
         shell: pwsh
         run: |
           $s=Get-Content build/WarRoomLauncher.cs -Raw
+          foreach($x in @('/gem','/enchantment','HandleGem','HandleEnchantment','GemCache','EnchantmentCache','WarRoom/1.7.25','"version\":\"1.7.25')){if(-not $s.Contains($x)){throw "Missing native resolver marker: $x"}}
           if($s -match 'app\.WaitForExit\(\)'){throw 'Transient Edge lifetime regression'}
           if($s -notmatch 'WaitForHealth\(baseUrl\)' -or $s -notmatch 'Application\.Run\(new HostContext'){throw 'Persistent launcher regression'}
           if($s -notmatch '/item-icon' -or $s -notmatch 'wowhead\.com/tbc/item='){throw 'Icon proxy regression'}
