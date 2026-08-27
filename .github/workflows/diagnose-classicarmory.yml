@@ -17,7 +17,23 @@ jobs:
           js=$(grep -oE 'src="/assets/index-[^"]+\.js"' work.html | head -n1 | cut -d'"' -f2)
           echo "BUNDLE: $js"
           curl -LfsS -A 'Mozilla/5.0' "https://classicarmory.gg$js" -o work.js
-          echo '=== endpoint hints ==='
-          grep -oE '.{0,180}(https?://[^"'"'"' ]+|/api/[^"'"'"' ]+|character[^"'"'"' ]{0,120}|equipment[^"'"'"' ]{0,120}|specialization[^"'"'"' ]{0,120}|talent[^"'"'"' ]{0,120}).{0,220}' work.js | head -n 250 || true
-          echo '=== fetch/axios hints ==='
-          grep -oE '.{0,220}(fetch\(|axios|baseURL|api\.battle|api/character|profile/wow).{0,260}' work.js | head -n 200 || true
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('work.js').read_text(encoding='utf-8',errors='ignore')
+          print('BUNDLE LENGTH:',len(t))
+          for pat in ('/api/','api.','fetch(','character','equipment','specialization','talent','itemLevel','gearscore','profile/wow'):
+              print('\n===',pat,'===')
+              start=0;shown=0
+              while shown<12:
+                  i=t.find(pat,start)
+                  if i<0: break
+                  print(t[max(0,i-240):i+520].replace('\n',' ')[:850])
+                  start=i+len(pat);shown+=1
+          print('\n=== URLS ===')
+          seen=[]
+          for u in re.findall(r'https?://[^"\'`\\ ]+',t):
+              if u not in seen and any(k in u.lower() for k in ('api','armory','battle','character')):
+                  seen.append(u); print(u[:500])
+                  if len(seen)>=60: break
+          PY
