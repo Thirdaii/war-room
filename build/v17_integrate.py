@@ -13,11 +13,11 @@ if not scripts: raise RuntimeError('No inline application script found')
 m=scripts[-1]; body=m.group(1)
 if JS_MARK in body: body=body[:body.index(JS_MARK)].rstrip()
 h=h[:m.start()]+'<script>'+body+'\n'+engine+'\n'+refresh+'\n'+armory+'\n'+ui+'\n</script>'+h[m.end():]
-h=re.sub(r'WAR ROOM APP • (?:COMMAND CENTER 1\.6|RAID INTELLIGENCE 1\.7(?:\.[0-9]+)?)','WAR ROOM APP • RAID INTELLIGENCE 1.7.6',h,count=1)
-h=re.sub(r'WAR ROOM v1\.(?:6|7(?:\.[0-9]+)?) • (?:NATIVE LAUNCHER|TBC RAID INTELLIGENCE)','WAR ROOM v1.7.6 • TBC RAID INTELLIGENCE',h,count=1)
-v=json.loads(version_file.read_text(encoding='utf-8')); v['version']='1.7.6'; v['notes']=['Per-group spec confidence is visible directly on G1-G5 intelligence tiles','Groups identify how many assigned raiders need spec verification','Freshness confidence is calculated from the same roster data used by Raid Intelligence','Refresh reliability and last-known roster preservation retained','ClassicArmory refresh and side-by-side Raid Intelligence retained']; version_file.write_text(json.dumps(v,indent=2),encoding='utf-8'); index.write_text(h,encoding='utf-8')
+h=re.sub(r'WAR ROOM APP • (?:COMMAND CENTER 1\.6|RAID INTELLIGENCE 1\.7(?:\.[0-9]+)?)','WAR ROOM APP • RAID INTELLIGENCE 1.7.7',h,count=1)
+h=re.sub(r'WAR ROOM v1\.(?:6|7(?:\.[0-9]+)?) • (?:NATIVE LAUNCHER|TBC RAID INTELLIGENCE)','WAR ROOM v1.7.7 • TBC RAID INTELLIGENCE',h,count=1)
+v=json.loads(version_file.read_text(encoding='utf-8')); v['version']='1.7.7'; v['notes']=['Group diagnostics identify exact raiders causing low-confidence party data','Diagnostics show class/spec, freshness state, age and recommended refresh action','G1-G5 confidence stays visible beside raid composition','ClassicArmory refresh reliability and last-known roster preservation retained','Encounter-aware TBC Phase 3 Raid Intelligence retained']; version_file.write_text(json.dumps(v,indent=2),encoding='utf-8'); index.write_text(h,encoding='utf-8')
 final=index.read_text(encoding='utf-8')
-for marker in (CSS_MARK,JS_MARK,REFRESH_MARK,ARMORY_MARK,UI_MARK,'WarRoomArmoryRefresh','WarRoomSpecRefresh','SPEC DATA CONFIDENCE','wrRefreshDetails','wr-party-confidence','needs check'):
-    if marker not in final: raise RuntimeError(f'Missing v1.7.6 integration marker: {marker}')
-if final.count(JS_MARK)!=1 or final.count(UI_MARK)!=1 or final.count(REFRESH_MARK)!=1 or final.count(ARMORY_MARK)!=1: raise RuntimeError('Duplicate v1.7.6 modules detected after upgrade')
-print('War Room v1.7.6 confidence visibility integration complete')
+for marker in (CSS_MARK,JS_MARK,REFRESH_MARK,ARMORY_MARK,UI_MARK,'WarRoomArmoryRefresh','WarRoomSpecRefresh','wr-party-diag','Refresh now','Refresh or set spec'):
+    if marker not in final: raise RuntimeError(f'Missing v1.7.7 integration marker: {marker}')
+if final.count(JS_MARK)!=1 or final.count(UI_MARK)!=1 or final.count(REFRESH_MARK)!=1 or final.count(ARMORY_MARK)!=1: raise RuntimeError('Duplicate v1.7.7 modules detected after upgrade')
+print('War Room v1.7.7 group diagnostics integration complete')
