@@ -21,16 +21,12 @@ jobs:
             d=$(find work/app -mindepth 1 -maxdepth 1 -type d | head -n1)
             [ -n "$d" ] && cp -r "$d"/* work/app/
           fi
-      - name: Inspect live raid and roster model
+      - name: Inspect live intelligence inputs
         run: |
           cat > work/inspect.py <<'PY'
           from pathlib import Path
           import re
           h=Path('work/app/index.html').read_text(encoding='utf-8')
-          print('=== DECLARATIONS ===')
-          for p in [r'(?m)^\s*(?:let|const|var)\s+roster\s*=.*$',r'(?m)^\s*(?:let|const|var)\s+raid\s*=.*$']:
-              m=re.search(p,h)
-              print(m.group(0)[:3000] if m else 'NOT FOUND')
           def block(name):
               m=re.search(r'function\s+'+re.escape(name)+r'\s*\([^)]*\)\s*\{',h)
               if not m:return 'NOT FOUND'
@@ -48,15 +44,13 @@ jobs:
                           depth-=1
                           if depth==0:return h[start:i+1]
                   i+=1
-              return h[start:start+12000]
-          for name in ('renderRoster','renderRaid','renderGroups'):
+              return h[start:start+16000]
+          for name in ('renderRoster','renderRaid','specArtCardHTML','groupBuffs','roleOf','deriveRole','openPlayer'):
               print('\n=== '+name+' ===')
-              print(block(name)[:12000])
-          print('\n=== FIELD TOKENS ===')
-          keys=set(re.findall(r'\b(?:p|player|r|char|member)\.([A-Za-z_][A-Za-z0-9_]*)',h))
-          for key in sorted(keys):
-              lk=key.lower()
-              if lk in {'name','class','role','spec','talents','talent','build','primaryspec','secondaryspec','gs','ilvl','attendance','rank'} or 'spec' in lk or 'talent' in lk:
-                  print(key)
+              print(block(name)[:16000])
+          print('\n=== ROSTER MUTATION LINES ===')
+          for line in h.splitlines():
+              if ('roster.' in line or 'roster[' in line) and any(k in line for k in ('spec','role','talent','build','Object.assign','forEach')):
+                  print(line[:4000])
           PY
           python work/inspect.py
