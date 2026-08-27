@@ -1,0 +1,21 @@
+/* War Room v1.7.11 - Raid Character Data UI */
+(function(){
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const norm=s=>String(s||'').trim();
+  const key=s=>norm(s).toLowerCase();
+  let expanded='';
+  function rosterRef(){try{if(typeof roster!=='undefined'&&Array.isArray(roster))return roster}catch(e){}return Array.isArray(window.roster)?window.roster:[]}
+  function raidRef(){try{if(typeof raid!=='undefined'&&Array.isArray(raid))return raid}catch(e){}return Array.isArray(window.raid)?window.raid:[]}
+  function talentSummary(p){const t=p.talentsData??p.talents;if(!t)return 'Talents unknown';if(typeof t==='string')return t.length>44?t.slice(0,41)+'…':t;if(Array.isArray(t)){const rows=t.map(x=>`${x.name||x.tree||'?'} ${x.points??x.value??''}`.trim()).filter(Boolean);return rows.join(' / ')||'Talents loaded'}if(typeof t==='object'){const rows=Object.entries(t).map(([k,v])=>typeof v==='object'&&v?`${v.name||k} ${v.points??v.value??''}`.trim():`${k} ${v}`).filter(Boolean);return rows.join(' / ')||'Talents loaded'}return 'Talents loaded'}
+  function gearRows(p){const g=Array.isArray(p.gear)?p.gear:Array.isArray(p.equipment)?p.equipment:Array.isArray(p.items)?p.items:[];return g}
+  function statusFor(p){const st=window.WarRoomArmoryRefresh?.getStatus?.(p.name);if(st?.status==='success')return 'fresh';if(st?.status)return st.status;if(p.spec||p.ilvl||gearRows(p).length)return 'loaded';return 'not refreshed'}
+  function ensurePanel(){const host=document.getElementById('wrRaidIntelLive');if(!host)return null;let panel=document.getElementById('wrCharacterData');if(panel)return panel;panel=document.createElement('section');panel.id='wrCharacterData';panel.className='wr-character-data';panel.innerHTML='<div class="wr-character-data-head"><b>Raid Character Data</b><span>Spec • iLvl • GS • gear</span></div><div id="wrCharacterDataRows"></div>';const refresh=host.querySelector('.wr-refresh-row');if(refresh)refresh.insertAdjacentElement('afterend',panel);else host.prepend(panel);panel.addEventListener('click',e=>{const btn=e.target.closest('[data-wr-character]');if(!btn)return;expanded=expanded===btn.dataset.wrCharacter?'':btn.dataset.wrCharacter;render()});return panel}
+  function detail(p){const gear=gearRows(p);const talents=talentSummary(p);const items=gear.length?gear.map(x=>`<div class="wr-character-item"><span>${esc(x.slot||'Gear')}</span><b>${esc(x.name||('Item '+(x.id||'')))}</b><em>${x.ilvl?`iLvl ${esc(x.ilvl)}`:''}</em></div>`).join(''):'<div class="wr-character-empty">No equipped gear received yet.</div>';return `<div class="wr-character-detail"><div class="wr-character-talents"><strong>Talents</strong><span>${esc(talents)}</span></div><div class="wr-character-items">${items}</div></div>`}
+  function row(p){const spec=p.spec||p.talentSpec||'Spec unknown',il=p.ilvl??'—',gs=p.gearscore??p.gearScore??'—',gear=gearRows(p),status=statusFor(p),open=expanded===key(p.name);return `<button type="button" class="wr-character-row ${esc(status)}" data-wr-character="${esc(key(p.name))}"><span class="wr-character-name">${esc(p.name)}</span><span class="wr-character-spec">${esc(spec)}</span><b>iLvl ${esc(il)}</b><b>GS ${esc(gs)}</b><em>${gear.length} slots</em><small>${esc(status)}</small></button>${open?detail(p):''}`}
+  function render(){const panel=ensurePanel();if(!panel)return;const rr=rosterRef(),byName=new Map(rr.map(p=>[key(p?.name),p])),names=[...new Set(raidRef().map(norm).filter(Boolean))];const players=names.map(n=>byName.get(key(n))||{name:n}).filter(Boolean);const rows=document.getElementById('wrCharacterDataRows');if(!rows)return;rows.innerHTML=players.length?players.map(row).join(''):'<div class="wr-character-empty">Assign raiders, then press Refresh Current Raid.</div>'}
+  let t=null;function queue(){clearTimeout(t);t=setTimeout(render,40)}
+  window.renderWarRoomCharacterData=render;
+  window.addEventListener('warroom:spec-refresh',()=>{render();setTimeout(render,120)});
+  document.addEventListener('DOMContentLoaded',()=>{setTimeout(render,300);setTimeout(render,1200)});
+  document.addEventListener('drop',queue);document.addEventListener('change',queue);
+})();
