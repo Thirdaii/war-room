@@ -7,33 +7,56 @@ permissions:
   contents: read
 jobs:
   diagnose:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Download live v1.7.7 package
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          New-Item -ItemType Directory -Force work/base,work/app | Out-Null
-          gh release download v1.7.7 --repo $env:GITHUB_REPOSITORY --pattern "WarRoom-App.zip" --dir work/base
-          Expand-Archive -Path work/base/WarRoom-App.zip -DestinationPath work/app -Force
+          mkdir -p work/app
+          gh release download v1.7.7 --repo "$GITHUB_REPOSITORY" --pattern "WarRoom-App.zip" --dir work
+          unzip -q work/WarRoom-App.zip -d work/app
+          if [ ! -f work/app/index.html ]; then
+            d=$(find work/app -mindepth 1 -maxdepth 1 -type d | head -n1)
+            [ -n "$d" ] && cp -r "$d"/* work/app/
+          fi
       - name: Inspect live raid and roster model
-        shell: pwsh
         run: |
-          python - <<'PY'
+          cat > work/inspect.py <<'PY'
           from pathlib import Path
           import re
           h=Path('work/app/index.html').read_text(encoding='utf-8')
-          patterns=[
-            r'let\s+roster\s*=.{0,500}',r'const\s+roster\s*=.{0,500}',r'var\s+roster\s*=.{0,500}',
-            r'let\s+raid\s*=.{0,500}',r'const\s+raid\s*=.{0,500}',r'var\s+raid\s*=.{0,500}',
-            r'function\s+renderRaid\s*\([^)]*\)\s*\{.{0,5000}?\n\}',
-            r'function\s+renderRoster\s*\([^)]*\)\s*\{.{0,5000}?\n\}',
-            r'role\s*:\s*[^,}\n]+',r'spec\s*:\s*[^,}\n]+',r'class\s*:\s*[^,}\n]+'
-          ]
-          for p in patterns:
-            print('\n###',p)
-            ms=list(re.finditer(p,h,re.S|re.I))
-            for m in ms[:8]: print(m.group(0)[:5000])
+          print('=== DECLARATIONS ===')
+          for p in [r'(?m)^\s*(?:let|const|var)\s+roster\s*=.*$',r'(?m)^\s*(?:let|const|var)\s+raid\s*=.*$']:
+              m=re.search(p,h)
+              print(m.group(0)[:3000] if m else 'NOT FOUND')
+          def block(name):
+              m=re.search(r'function\s+'+re.escape(name)+r'\s*\([^)]*\)\s*\{',h)
+              if not m:return 'NOT FOUND'
+              start=m.start(); i=m.end()-1; depth=0; quote=None; esc=False
+              while i<len(h):
+                  c=h[i]
+                  if quote:
+                      if esc:esc=False
+                      elif c=='\\':esc=True
+                      elif c==quote:quote=None
+                  else:
+                      if c in "'\"`":quote=c
+                      elif c=='{':depth+=1
+                      elif c=='}':
+                          depth-=1
+                          if depth==0:return h[start:i+1]
+                  i+=1
+              return h[start:start+12000]
+          for name in ('renderRoster','renderRaid','renderGroups'):
+              print('\n=== '+name+' ===')
+              print(block(name)[:12000])
+          print('\n=== FIELD TOKENS ===')
+          keys=set(re.findall(r'\b(?:p|player|r|char|member)\.([A-Za-z_][A-Za-z0-9_]*)',h))
+          for key in sorted(keys):
+              lk=key.lower()
+              if lk in {'name','class','role','spec','talents','talent','build','primaryspec','secondaryspec','gs','ilvl','attendance','rank'} or 'spec' in lk or 'talent' in lk:
+                  print(key)
           PY
+          python work/inspect.py
