@@ -54,7 +54,8 @@ jobs:
           $s=Get-Content build/WarRoomLauncher.cs -Raw
           foreach($x in @('/item-appearance','HandleItemAppearance','ItemAppearanceCache','ExtractDisplayId','itemAppearances','WarRoom/1.7.26','"version\":\"1.7.26','/gem','/enchantment','/item-icon')){if(-not $s.Contains($x)){throw "Missing native v1.7.26 marker: $x"}}
           if($s -match 'app\.WaitForExit\(\)'){throw 'Transient Edge lifetime regression'}
-          if($s -notmatch 'WaitForHealth\(baseUrl\)' -or $s -notmatch 'Application\.Run\(new HostContext'){throw 'Persistent launcher regression'}
+          foreach($x in @('WaitForHealth(baseUrl)','using(var host=new HostContext(listener,app))','Application.Run(host)','CheckAppLifetime','BeginShutdown','listener.Stop()','listener.Close()','ExitThread()')){if(-not $s.Contains($x)){throw "Missing clean-shutdown launcher marker: $x"}}
+          if($s -match 'taskkill' -or $s -match 'Kill\(\)'){throw 'Unsafe broad process termination detected'}
           if($s -notmatch 'wowhead\.com/tbc/item='){throw 'TBC item upstream regression'}
           $csc="$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"; $src=(Resolve-Path build/WarRoomLauncher.cs).Path; $out=(Join-Path (Resolve-Path work).Path 'WarRoomLauncher-test.exe')
           & $csc /nologo /target:winexe /optimize+ /reference:System.dll /reference:System.Windows.Forms.dll "/out:$out" "$src"
