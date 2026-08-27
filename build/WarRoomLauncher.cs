@@ -37,21 +37,40 @@ internal static class WarRoomLauncher
         string index = Path.Combine(Root, "index.html");
         if (!File.Exists(index)) throw new FileNotFoundException("index.html not found", index);
         int port = FindPort(); string baseUrl = "http://127.0.0.1:" + port + "/";
-        var listener = new HttpListener(); listener.Prefixes.Add(baseUrl); listener.Start(); bool running = true;
-        var serverThread = new Thread(() => { while (running) { try { var ctx = listener.GetContext(); ThreadPool.QueueUserWorkItem(_ => Handle(ctx)); } catch { if (!running) break; } } });
+        var listener = new HttpListener(); listener.Prefixes.Add(baseUrl); listener.Start();
+        var serverThread = new Thread(() => { while (listener.IsListening) { try { var ctx = listener.GetContext(); ThreadPool.QueueUserWorkItem(_ => Handle(ctx)); } catch { if (!listener.IsListening) break; } } });
         serverThread.IsBackground = true; serverThread.Start();
+        WaitForHealth(baseUrl);
         Process app = LaunchEdgeApp(baseUrl);
-        if (app != null) { try { app.WaitForExit(); } catch { Application.Run(new HostContext()); } }
-        else { Process.Start(new ProcessStartInfo(baseUrl) { UseShellExecute = true }); Application.Run(new HostContext()); }
-        running = false; try { listener.Stop(); listener.Close(); } catch { }
+        // Edge may hand --app off to an existing browser process and let the spawned process exit immediately.
+        // Do not tie the local HTTP server lifetime to that transient Process object.
+        Application.Run(new HostContext(listener, app));
     }
+
+    private static void WaitForHealth(string baseUrl)
+    {
+        Exception last = null;
+        for (int i = 0; i < 40; i++)
+        {
+            try
+            {
+                var req = (HttpWebRequest)WebRequest.Create(baseUrl + "health"); req.Timeout = 250; req.ReadWriteTimeout = 250; req.Proxy = null;
+                using (var resp = (HttpWebResponse)req.GetResponse()) if (resp.StatusCode == HttpStatusCode.OK) return;
+            }
+            catch (Exception ex) { last = ex; Thread.Sleep(50); }
+        }
+        try { listenerFailureCleanup(); } catch { }
+        throw new InvalidOperationException("War Room local server did not become healthy before launch.", last);
+    }
+
+    private static void listenerFailureCleanup() { }
 
     private static Process LaunchEdgeApp(string url)
     {
         string[] candidates = { Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Microsoft", "Edge", "Application", "msedge.exe"), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Microsoft", "Edge", "Application", "msedge.exe") };
         string profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WarRoom", "EdgeProfile"); Directory.CreateDirectory(profile);
         foreach (string edge in candidates) { if (!File.Exists(edge)) continue; return Process.Start(new ProcessStartInfo { FileName = edge, WorkingDirectory = Root, UseShellExecute = false, Arguments = "--user-data-dir=\"" + profile + "\" --app=\"" + url + "\" --start-maximized --no-first-run --disable-features=msEdgeFirstRunExperience" }); }
-        return null;
+        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); return null;
     }
 
     private static int FindPort()
@@ -67,7 +86,7 @@ internal static class WarRoomLauncher
             string path = ctx.Request.Url.AbsolutePath;
             if (path.Equals("/armory", StringComparison.OrdinalIgnoreCase)) { HandleArmory(ctx); return; }
             if (path.Equals("/item-icon", StringComparison.OrdinalIgnoreCase)) { HandleItemIcon(ctx); return; }
-            if (path.Equals("/health", StringComparison.OrdinalIgnoreCase)) { Write(ctx, 200, "application/json", "{\"ok\":true,\"version\":\"1.7.17\",\"tls\":\"1.2\",\"itemIcons\":true}"); return; }
+            if (path.Equals("/health", StringComparison.OrdinalIgnoreCase)) { Write(ctx, 200, "application/json", "{\"ok\":true,\"version\":\"1.7.23\",\"tls\":\"1.2\",\"itemIcons\":true}"); return; }
             ServeStatic(ctx, path);
         }
         catch (Exception ex) { Write(ctx, 500, "application/json", "{\"error\":\"" + JsonEscape(ex.Message) + "\",\"stage\":\"local-host\"}"); }
@@ -83,7 +102,7 @@ internal static class WarRoomLauncher
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
             using (var wc = new WebClient())
             {
-                wc.Encoding = Encoding.UTF8; wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) WarRoom/1.7.17"; wc.Headers[HttpRequestHeader.Accept] = "application/json, text/plain, */*"; wc.Headers[HttpRequestHeader.AcceptLanguage] = "en-US,en;q=0.9";
+                wc.Encoding = Encoding.UTF8; wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) WarRoom/1.7.23"; wc.Headers[HttpRequestHeader.Accept] = "application/json, text/plain, */*"; wc.Headers[HttpRequestHeader.AcceptLanguage] = "en-US,en;q=0.9";
                 string body = wc.DownloadString(url);
                 if (string.IsNullOrWhiteSpace(body) || (!body.TrimStart().StartsWith("{") && !body.TrimStart().StartsWith("["))) { Write(ctx, 502, "application/json", "{\"error\":\"Armory returned a non-JSON payload\",\"stage\":\"upstream-parse\",\"upstream\":\"classicarmory.gg\"}"); return; }
                 ctx.Response.Headers["X-WarRoom-Armory"] = "ok"; Write(ctx, 200, "application/json; charset=utf-8", body);
@@ -111,7 +130,7 @@ internal static class WarRoomLauncher
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
                 using (var wc = new WebClient())
                 {
-                    wc.Encoding = Encoding.UTF8; wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0 WarRoom/1.7.17"; wc.Headers[HttpRequestHeader.Accept] = "application/xml,text/xml,*/*";
+                    wc.Encoding = Encoding.UTF8; wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0 WarRoom/1.7.23"; wc.Headers[HttpRequestHeader.Accept] = "application/xml,text/xml,*/*";
                     string xml = wc.DownloadString("https://www.wowhead.com/tbc/item=" + id + "&xml");
                     var m = Regex.Match(xml ?? "", "<icon[^>]*>([^<]+)</icon>", RegexOptions.IgnoreCase);
                     if (m.Success) icon = WebUtility.HtmlDecode(m.Groups[1].Value).Trim();
@@ -143,6 +162,11 @@ internal static class WarRoomLauncher
     }
 
     private static string JsonEscape(string s) { return (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", " ").Replace("\n", " "); }
-    private sealed class HostContext : ApplicationContext { }
+    private sealed class HostContext : ApplicationContext
+    {
+        private readonly HttpListener listener; private readonly Process launched;
+        public HostContext(HttpListener listener, Process launched) { this.listener=listener; this.launched=launched; }
+        protected override void ExitThreadCore() { try { if(listener!=null){listener.Stop();listener.Close();} } catch {} try { if(launched!=null) launched.Dispose(); } catch {} base.ExitThreadCore(); }
+    }
     private static void ShowError(Exception ex) { MessageBox.Show("War Room could not start.\n\n" + ex.Message + "\n\nYou can still use Launch War Room.bat as an emergency fallback.", "Me Not That Kind Of Orc - War Room", MessageBoxButtons.OK, MessageBoxIcon.Error); }
 }
