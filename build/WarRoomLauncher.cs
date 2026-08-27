@@ -84,7 +84,19 @@ internal static class WarRoomLauncher
         Process app = LaunchEdgeApp(baseUrl);
         if (app != null)
         {
-            try { app.WaitForExit(); } catch { }
+            try
+            {
+                // A dedicated Edge profile prevents --app from being handed off to an
+                // unrelated existing Edge process. Keep the local host alive for the
+                // lifetime of the War Room app process.
+                app.WaitForExit();
+            }
+            catch
+            {
+                // If process tracking fails, keep the host alive rather than dropping
+                // the localhost connection underneath the visible War Room window.
+                Application.Run(new HostContext());
+            }
         }
         else
         {
@@ -102,6 +114,8 @@ internal static class WarRoomLauncher
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Microsoft", "Edge", "Application", "msedge.exe"),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Microsoft", "Edge", "Application", "msedge.exe")
         };
+        string profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WarRoom", "EdgeProfile");
+        Directory.CreateDirectory(profile);
         foreach (string edge in candidates)
         {
             if (!File.Exists(edge)) continue;
@@ -110,7 +124,7 @@ internal static class WarRoomLauncher
                 FileName = edge,
                 WorkingDirectory = Root,
                 UseShellExecute = false,
-                Arguments = "--app=\"" + url + "\" --start-maximized --no-first-run"
+                Arguments = "--user-data-dir=\"" + profile + "\" --app=\"" + url + "\" --start-maximized --no-first-run --disable-features=msEdgeFirstRunExperience"
             });
         }
         return null;
@@ -159,7 +173,7 @@ internal static class WarRoomLauncher
         {
             using (var wc = new WebClient())
             {
-                wc.Headers[HttpRequestHeader.UserAgent] = "WarRoom/1.7.9";
+                wc.Headers[HttpRequestHeader.UserAgent] = "WarRoom/1.7.10";
                 wc.Headers[HttpRequestHeader.Accept] = "application/json";
                 string body = wc.DownloadString(url);
                 Write(ctx, 200, "application/json; charset=utf-8", body);
