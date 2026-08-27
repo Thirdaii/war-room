@@ -23,7 +23,7 @@ for marker in (CSS_MARK,JS_MARK,REFRESH_MARK,ARMORY_MARK,UI_MARK,CHAR_MARK,INSPE
     if marker not in final: raise RuntimeError(f'Missing v1.7.20 integration marker: {marker}')
 if '||document.body' in inspectui or '||document.body' in graphics: raise RuntimeError('Unsafe document.body Inspect fallback detected')
 if 'activeScope' not in inspectui or '?.isConnected' not in inspectui or 'token.isConnected' not in inspectui or 'token===activeScope' not in inspectui: raise RuntimeError('Inspect enrichment live-dossier/async guard was lost')
-if 'activeScope' not in graphics or 'scope?.isConnected' not in graphics or 'myGeneration' not in graphics or 'generation++' not in graphics: raise RuntimeError('Graphics stale/detached dossier guards were lost')
+if 'activeScope' not in graphics or 'scope?.isConnected' not in graphics or 'generation++' not in graphics or 'g!==generation' not in graphics: raise RuntimeError('Graphics stale/detached dossier guards were lost')
 if 'scope!==activeScope' not in graphics and 'scope !== activeScope' not in graphics: raise RuntimeError('Graphics active-scope equality guard was lost')
 if final.count(JS_MARK)!=1 or final.count(INSPECT_MARK)!=1 or final.count(GRAPHICS_MARK)!=1: raise RuntimeError('Duplicate v1.7.20 modules detected after upgrade')
 if updater.exists() and 'Start-Process -FilePath $exe -ArgumentList "--app"' not in updater.read_text(encoding='utf-8-sig'): raise RuntimeError('Updater did not wire native app mode')
