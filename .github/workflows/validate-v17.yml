@@ -37,7 +37,7 @@ jobs:
           if(([regex]::Matches($h,[regex]::Escape('/* War Room v1.7.20 - restored gear cards + lifecycle-safe artwork */'))).Count -ne 1){ throw 'v1.7.20 gear module missing or duplicated' }
           if($h -match '\|\|document\.body'){ throw 'Unsafe document.body fallback returned' }
           if($h -notmatch 'renderItemText'){ throw 'Verified item name/iLvl renderer missing' }
-          if($h -notmatch 'data-wr-slot'){ throw 'Slot-structure card mapping missing' }
+          if($h -notmatch 'dataset\.wrSlot'){ throw 'Slot-structure card mapping missing' }
           if($h -notmatch 'width=64'){ throw 'Gear artwork is not using 64px item images' }
           if($h -notmatch 'hidePlaceholderArt'){ throw 'Artwork placeholder replacement missing' }
           if($h -notmatch 'ico\.onload'){ throw 'Renderer does not wait for successful artwork load' }
