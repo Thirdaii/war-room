@@ -1,7 +1,7 @@
-name: Validate War Room v1.7.18
+name: Validate War Room v1.7.19
 on:
   push:
-    branches: [war-room-v1.7.18-inspect-lifecycle]
+    branches: [war-room-v1.7.19-gear-images]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,33 +28,35 @@ jobs:
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           python build/v17_integrate.py work/app
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-      - name: Validate Inspect lifecycle safety
+      - name: Validate visible Inspect gear artwork path
         shell: pwsh
         run: |
           $h=Get-Content work/app/index.html -Raw
           $v=Get-Content work/app/version.json -Raw | ConvertFrom-Json
-          if($v.version -ne '1.7.18'){ throw 'Packaged version is not 1.7.18' }
-          if(([regex]::Matches($h,[regex]::Escape('/* War Room v1.7.18 - Inspect lifecycle-safe enrichment */'))).Count -ne 1){ throw 'Lifecycle-safe enrichment module missing or duplicated' }
-          if(([regex]::Matches($h,[regex]::Escape('/* War Room v1.7.18 - Inspect lifecycle-safe graphics */'))).Count -ne 1){ throw 'Lifecycle-safe graphics module missing or duplicated' }
-          if($h -match '\|\|document\.body'){ throw 'Unsafe document.body fallback remains in packaged Inspect modules' }
-          if($h -notmatch 'scope\.isConnected'){ throw 'Inspect renderer does not guard detached dossier writes' }
-          if($h -notmatch 'scope!==activeScope'){ throw 'Inspect renderer does not guard stale dossier writes' }
-          if($h -notmatch 'generation\+\+'){ throw 'Inspect graphics does not invalidate pending async icon work on lifecycle changes' }
-          if($h -notmatch '/item-icon\?id='){ throw 'Inspect renderer lost item icon resolver fallback' }
-          if($h -notmatch 'LIVE ARMORY EQUIPMENT'){ throw 'Inspect renderer lost live equipment header' }
+          if($v.version -ne '1.7.19'){ throw 'Packaged version is not 1.7.19' }
+          if(([regex]::Matches($h,[regex]::Escape('/* War Room v1.7.19 - lifecycle-safe real gear artwork */'))).Count -ne 1){ throw 'v1.7.19 gear artwork module missing or duplicated' }
+          if($h -match '\|\|document\.body'){ throw 'Unsafe document.body fallback returned' }
+          if($h -notmatch 'width=64'){ throw 'Gear artwork is not using 64px item images' }
+          if($h -notmatch 'hidePlaceholderArt'){ throw 'Renderer does not replace placeholder slot artwork after image load' }
+          if($h -notmatch 'ico\.onload'){ throw 'Renderer does not wait for successful artwork load before replacing placeholder' }
+          if($h -notmatch 'naturalWidth'){ throw 'Renderer does not handle cached already-loaded artwork' }
+          if($h -notmatch '/item-icon\?id='){ throw 'Item ID icon fallback missing' }
+          if($h -notmatch 'scope\.isConnected' -or $h -notmatch 'scope!==activeScope' -or $h -notmatch 'generation\+\+'){ throw 'Inspect lifecycle guards missing' }
           python -c "import re,pathlib; h=pathlib.Path('work/app/index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text(chr(10).join(s),encoding='utf-8')"
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           $tests=@('work/check.js','build/raid_intelligence.js','build/spec_refresh.js','build/armory_refresh_adapter.js','build/raid_intelligence_ui.js','build/character_data_ui.js','build/inspect_enrichment_sync.js','build/inspect_graphics.js')
           foreach($t in $tests){ node --check $t; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE} }
           $runs=@('build/raid_intelligence_test.js','build/spec_freshness_test.js','build/spec_refresh_test.js','build/armory_refresh_adapter_test.js','build/group_diagnostics_test.js','build/character_hydration_test.js','build/classicarmory_gg_contract_test.js')
           foreach($t in $runs){ node $t; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE} }
-      - name: Compile and validate native proxy
+      - name: Compile and validate native icon proxy
         shell: pwsh
         run: |
           $srcText=Get-Content build/WarRoomLauncher.cs -Raw
           if($srcText -notmatch 'SecurityProtocolType\.Tls12'){ throw 'Launcher does not force TLS 1.2' }
           if($srcText -notmatch 'classicarmory\.gg/api/character/'){ throw 'Launcher missing armory proxy endpoint' }
           if($srcText -notmatch '/item-icon'){ throw 'Launcher missing item icon endpoint' }
+          if($srcText -notmatch 'wowhead\.com/tbc/item='){ throw 'Launcher missing TBC item lookup' }
+          if($srcText -notmatch 'wow\.zamimg\.com/images/wow/icons/large/'){ throw 'Launcher missing item artwork URL construction' }
           $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
           $src=(Resolve-Path 'build/WarRoomLauncher.cs').Path
           $out=(Join-Path (Resolve-Path 'work').Path 'WarRoomLauncher-test.exe')
