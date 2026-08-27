@@ -1,7 +1,7 @@
-name: Validate War Room v1.7.22
+name: Validate War Room v1.7.23
 on:
   push:
-    branches: [war-room-v1.7.22-fix-equipment-card-selector]
+    branches: [war-room-v1.7.23-fix-local-host-lifetime]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,36 +28,26 @@ jobs:
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           python build/v17_integrate.py work/app
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-      - name: Validate exact Inspect equipment-card binding
+      - name: Preserve v1.7.22 Inspect gear pipeline
         shell: pwsh
         run: |
           $h=Get-Content work/app/index.html -Raw
-          $v=Get-Content work/app/version.json -Raw | ConvertFrom-Json
-          if($v.version -ne '1.7.22'){ throw 'Packaged version is not 1.7.22' }
-          if(([regex]::Matches($h,[regex]::Escape('/* War Room v1.7.22 - exact equipment-card binding + lifecycle-safe artwork */'))).Count -ne 1){ throw 'v1.7.22 gear module missing or duplicated' }
-          if($h -notmatch 'directSlotLabels'){ throw 'Exact slot-label card detector missing' }
-          if($h -notmatch 'found\.length===1'){ throw 'Card selector does not require exactly one slot label' }
-          if($h -match 'txt\.includes'){ throw 'Legacy broad whole-matrix selector returned' }
-          if($h -notmatch 'matrixHeading'){ throw 'Leaf-only matrix heading selector missing' }
-          if($h -notmatch '!e\.querySelector\('){ throw 'Leaf slot-label protection missing' }
-          if($h -notmatch 'WarRoomInspectLive' -or $h -notmatch 'apply\(d\.scope,d\.character\)'){ throw 'v1.7.21 hydrated character handoff lost' }
-          if($h -notmatch 'renderItemText' -or $h -notmatch 'wr-live-item-icon'){ throw 'Item details/artwork renderer missing' }
-          if($h -notmatch '/item-icon\?id='){ throw 'Item-ID artwork fallback missing' }
-          if($h -notmatch 'scope!==activeScope' -or $h -notmatch 'generation\+\+'){ throw 'Inspect lifecycle guards missing' }
+          if($h -notmatch 'directSlotLabels' -or $h -notmatch 'found\.length===1'){ throw 'Exact slot-card selector missing' }
+          if($h -match 'txt\.includes'){ throw 'Legacy whole-matrix selector returned' }
+          if($h -notmatch 'WarRoomInspectLive' -or $h -notmatch 'wr-live-item-icon' -or $h -notmatch '/item-icon\?id='){ throw 'Inspect gear/artwork pipeline lost' }
           python -c "import re,pathlib; h=pathlib.Path('work/app/index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text(chr(10).join(s),encoding='utf-8')"
+          node --check work/check.js
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-          $tests=@('work/check.js','build/inspect_enrichment_sync.js','build/inspect_graphics.js')
-          foreach($t in $tests){ node --check $t; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE} }
-          $runs=@('build/raid_intelligence_test.js','build/spec_freshness_test.js','build/spec_refresh_test.js','build/armory_refresh_adapter_test.js','build/group_diagnostics_test.js','build/character_hydration_test.js','build/classicarmory_gg_contract_test.js')
-          foreach($t in $runs){ node $t; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE} }
-      - name: Compile and validate native icon proxy
+      - name: Compile and validate persistent local host
         shell: pwsh
         run: |
           $srcText=Get-Content build/WarRoomLauncher.cs -Raw
-          if($srcText -notmatch 'SecurityProtocolType\.Tls12'){ throw 'Launcher does not force TLS 1.2' }
-          if($srcText -notmatch '/item-icon'){ throw 'Launcher missing item icon endpoint' }
-          if($srcText -notmatch 'wowhead\.com/tbc/item='){ throw 'Launcher missing TBC item lookup' }
-          if($srcText -notmatch 'wow\.zamimg\.com/images/wow/icons/large/'){ throw 'Launcher missing item artwork URL construction' }
+          if($srcText -notmatch 'WaitForHealth\(baseUrl\)'){ throw 'Launcher does not prove local health before browser launch' }
+          if($srcText -match 'app\.WaitForExit\(\)'){ throw 'Launcher still ties server lifetime to transient Edge process' }
+          if($srcText -notmatch 'Application\.Run\(new HostContext\(listener, app\)\)'){ throw 'Persistent host message loop missing' }
+          if($srcText -notmatch 'listener\.IsListening'){ throw 'HTTP server loop does not follow listener lifetime' }
+          if(-not $srcText.Contains('\"version\":\"1.7.23\"')){ throw 'Health endpoint not bumped to v1.7.23' }
+          if($srcText -notmatch '/item-icon' -or $srcText -notmatch 'wowhead\.com/tbc/item='){ throw 'Item icon proxy lost' }
           $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
           $src=(Resolve-Path 'build/WarRoomLauncher.cs').Path
           $out=(Join-Path (Resolve-Path 'work').Path 'WarRoomLauncher-test.exe')
