@@ -1,7 +1,7 @@
-name: Validate War Room v1.7.20
+name: Validate War Room v1.7.21
 on:
   push:
-    branches: [war-room-v1.7.20-restore-gear-render]
+    branches: [war-room-v1.7.21-fix-live-gear-binding]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,14 +28,19 @@ jobs:
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           python build/v17_integrate.py work/app
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-      - name: Validate restored Inspect gear cards and artwork
+      - name: Validate live-bound Inspect gear cards and artwork
         shell: pwsh
         run: |
           $h=Get-Content work/app/index.html -Raw
           $v=Get-Content work/app/version.json -Raw | ConvertFrom-Json
-          if($v.version -ne '1.7.20'){ throw 'Packaged version is not 1.7.20' }
-          if(([regex]::Matches($h,[regex]::Escape('/* War Room v1.7.20 - restored gear cards + lifecycle-safe artwork */'))).Count -ne 1){ throw 'v1.7.20 gear module missing or duplicated' }
+          if($v.version -ne '1.7.21'){ throw 'Packaged version is not 1.7.21' }
+          if(([regex]::Matches($h,[regex]::Escape('/* War Room v1.7.21 - Inspect enrichment publishes live character binding */'))).Count -ne 1){ throw 'v1.7.21 enrichment module missing or duplicated' }
+          if(([regex]::Matches($h,[regex]::Escape('/* War Room v1.7.21 - live-bound gear cards + lifecycle-safe artwork */'))).Count -ne 1){ throw 'v1.7.21 gear module missing or duplicated' }
           if($h -match '\|\|document\.body'){ throw 'Unsafe document.body fallback returned' }
+          if($h -notmatch 'WarRoomInspectLive'){ throw 'Hydrated Inspect character publication missing' }
+          if($h -notmatch 'warroom:inspect-character-ready'){ throw 'Inspect character-ready handoff missing' }
+          if($h -notmatch 'apply\(d\.scope,d\.character\)'){ throw 'Graphics does not consume exact hydrated character' }
+          if($h -notmatch 'boundCharacter'){ throw 'Live character fallback binding missing' }
           if($h -notmatch 'renderItemText'){ throw 'Verified item name/iLvl renderer missing' }
           if($h -notmatch 'dataset\.wrSlot'){ throw 'Slot-structure card mapping missing' }
           if($h -notmatch 'width=64'){ throw 'Gear artwork is not using 64px item images' }
@@ -43,7 +48,7 @@ jobs:
           if($h -notmatch 'ico\.onload'){ throw 'Renderer does not wait for successful artwork load' }
           if($h -notmatch 'naturalWidth'){ throw 'Cached artwork handling missing' }
           if($h -notmatch '/item-icon\?id='){ throw 'Item ID icon fallback missing' }
-          if($h -notmatch 'scope\?\.isConnected' -or $h -notmatch 'scope!==activeScope' -or $h -notmatch 'generation\+\+'){ throw 'Inspect graphics lifecycle guards missing' }
+          if($h -notmatch 'scope!==activeScope' -or $h -notmatch 'generation\+\+'){ throw 'Inspect graphics lifecycle guards missing' }
           python -c "import re,pathlib; h=pathlib.Path('work/app/index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text(chr(10).join(s),encoding='utf-8')"
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           $tests=@('work/check.js','build/raid_intelligence.js','build/spec_refresh.js','build/armory_refresh_adapter.js','build/raid_intelligence_ui.js','build/character_data_ui.js','build/inspect_enrichment_sync.js','build/inspect_graphics.js')
