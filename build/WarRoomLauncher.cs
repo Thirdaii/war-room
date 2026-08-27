@@ -15,6 +15,7 @@ internal static class WarRoomLauncher
     {
         try
         {
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
             if (args != null && Array.Exists(args, a => string.Equals(a, "--app", StringComparison.OrdinalIgnoreCase)))
             {
                 RunAppHost();
@@ -84,19 +85,8 @@ internal static class WarRoomLauncher
         Process app = LaunchEdgeApp(baseUrl);
         if (app != null)
         {
-            try
-            {
-                // A dedicated Edge profile prevents --app from being handed off to an
-                // unrelated existing Edge process. Keep the local host alive for the
-                // lifetime of the War Room app process.
-                app.WaitForExit();
-            }
-            catch
-            {
-                // If process tracking fails, keep the host alive rather than dropping
-                // the localhost connection underneath the visible War Room window.
-                Application.Run(new HostContext());
-            }
+            try { app.WaitForExit(); }
+            catch { Application.Run(new HostContext()); }
         }
         else
         {
@@ -150,19 +140,19 @@ internal static class WarRoomLauncher
         {
             string path = ctx.Request.Url.AbsolutePath;
             if (path.Equals("/armory", StringComparison.OrdinalIgnoreCase)) { HandleArmory(ctx); return; }
-            if (path.Equals("/health", StringComparison.OrdinalIgnoreCase)) { Write(ctx, 200, "application/json", "{\"ok\":true}"); return; }
+            if (path.Equals("/health", StringComparison.OrdinalIgnoreCase)) { Write(ctx, 200, "application/json", "{\"ok\":true,\"version\":\"1.7.12\",\"tls\":\"1.2\"}"); return; }
             ServeStatic(ctx, path);
         }
         catch (Exception ex)
         {
-            Write(ctx, 500, "application/json", "{\"error\":\"" + JsonEscape(ex.Message) + "\"}");
+            Write(ctx, 500, "application/json", "{\"error\":\"" + JsonEscape(ex.Message) + "\",\"stage\":\"local-host\"}");
         }
     }
 
     private static void HandleArmory(HttpListenerContext ctx)
     {
         string name = ctx.Request.QueryString["name"] ?? "";
-        if (string.IsNullOrWhiteSpace(name)) { Write(ctx, 400, "application/json", "{\"error\":\"Missing character name\"}"); return; }
+        if (string.IsNullOrWhiteSpace(name)) { Write(ctx, 400, "application/json", "{\"error\":\"Missing character name\",\"stage\":\"request\"}"); return; }
 
         string realm = "dreamscythe";
         string region = "us";
@@ -171,11 +161,20 @@ internal static class WarRoomLauncher
 
         try
         {
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
             using (var wc = new WebClient())
             {
-                wc.Headers[HttpRequestHeader.UserAgent] = "WarRoom/1.7.10";
-                wc.Headers[HttpRequestHeader.Accept] = "application/json";
+                wc.Encoding = Encoding.UTF8;
+                wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) WarRoom/1.7.12";
+                wc.Headers[HttpRequestHeader.Accept] = "application/json, text/plain, */*";
+                wc.Headers[HttpRequestHeader.AcceptLanguage] = "en-US,en;q=0.9";
                 string body = wc.DownloadString(url);
+                if (string.IsNullOrWhiteSpace(body) || (!body.TrimStart().StartsWith("{") && !body.TrimStart().StartsWith("[")))
+                {
+                    Write(ctx, 502, "application/json", "{\"error\":\"Armory returned a non-JSON payload\",\"stage\":\"upstream-parse\",\"upstream\":\"classicarmory.gg\"}");
+                    return;
+                }
+                ctx.Response.Headers["X-WarRoom-Armory"] = "ok";
                 Write(ctx, 200, "application/json; charset=utf-8", body);
             }
         }
@@ -183,8 +182,21 @@ internal static class WarRoomLauncher
         {
             var response = ex.Response as HttpWebResponse;
             int status = response != null ? (int)response.StatusCode : 502;
-            string message = response != null ? ("Armory request failed (" + status + ")") : ex.Message;
-            Write(ctx, status >= 400 && status < 600 ? status : 502, "application/json", "{\"error\":\"" + JsonEscape(message) + "\"}");
+            string upstreamBody = "";
+            try
+            {
+                if (response != null && response.GetResponseStream() != null)
+                    using (var sr = new StreamReader(response.GetResponseStream())) upstreamBody = sr.ReadToEnd();
+            }
+            catch { }
+            string message = response != null ? ("Armory request failed (HTTP " + status + ")") : ex.Message;
+            string detail = string.IsNullOrWhiteSpace(upstreamBody) ? "" : upstreamBody;
+            if (detail.Length > 240) detail = detail.Substring(0, 240);
+            Write(ctx, status >= 400 && status < 600 ? status : 502, "application/json", "{\"error\":\"" + JsonEscape(message) + "\",\"stage\":\"upstream-request\",\"upstream\":\"classicarmory.gg\",\"detail\":\"" + JsonEscape(detail) + "\"}");
+        }
+        catch (Exception ex)
+        {
+            Write(ctx, 502, "application/json", "{\"error\":\"" + JsonEscape(ex.Message) + "\",\"stage\":\"proxy\",\"upstream\":\"classicarmory.gg\"}");
         }
     }
 
