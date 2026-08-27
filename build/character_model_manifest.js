@@ -1,0 +1,17 @@
+/* War Room v1.7.26 - Character model manifest builder */
+(function(){
+  const norm=s=>String(s??'').trim();
+  const raceIds={human:1,orc:2,dwarf:3,nightelf:4,'night elf':4,scourge:5,undead:5,tauren:6,gnome:7,troll:8,bloodelf:10,'blood elf':10,draenei:11};
+  const slotIds={head:1,shoulder:3,shoulders:3,body:4,shirt:4,chest:5,waist:6,legs:7,feet:8,wrist:9,wrists:9,hands:10,back:15,cloak:15,mainhand:21,main_hand:21,weapon:21,offhand:22,off_hand:22,ranged:18,tabard:19};
+  const appearanceCache=new Map();
+  function key(s){return norm(s).toLowerCase().replace(/[^a-z0-9_]+/g,'')}
+  function int(v){const n=Number(v);return Number.isInteger(n)&&n>=0?n:null}
+  function raceId(v){const n=int(v);if(n!=null&&n>0)return n;return raceIds[norm(v).toLowerCase()]||null}
+  function genderId(v){const n=int(v);if(n===0||n===1)return n;const s=norm(v).toLowerCase();if(s==='female'||s==='f')return 0;if(s==='male'||s==='m')return 1;return null}
+  function viewerSlot(v){const n=int(v);if(n!=null){if(n===16)return 21;if(n===17)return 22;return n}return slotIds[key(v)]||null}
+  function directDisplayId(item){for(const v of [item?.displayId,item?.displayID,item?.display_id,item?.appearanceId,item?.appearance_id,item?.item?.displayId,item?.item?.displayID,item?.item?.display_id,item?.appearance?.displayId,item?.appearance?.display_id,item?.raw?.displayId,item?.raw?.displayID,item?.raw?.display_id,item?.raw?.item?.displayId,item?.raw?.item?.display_id]){const n=int(v);if(n!=null&&n>0)return n}return null}
+  async function resolveAppearance(item){const direct=directDisplayId(item);if(direct)return direct;const id=String(item?.id??item?.itemId??item?.item_id??'').trim();if(!/^\d+$/.test(id))return null;if(appearanceCache.has(id))return appearanceCache.get(id);try{const r=await fetch(`/item-appearance?id=${encodeURIComponent(id)}`,{cache:'force-cache'});if(!r.ok)throw 0;const j=await r.json(),d=int(j?.displayId??j?.display_id);const value=d&&d>0?d:null;appearanceCache.set(id,value);return value}catch(e){appearanceCache.set(id,null);return null}}
+  function customization(character){const a=character?.appearance||{};const out={};for(const [dst,vals] of Object.entries({skin:[a.skin,character?.skin],face:[a.face,character?.face],hairStyle:[a.hairStyle,a.hair_style,character?.hairStyle,character?.hair_style],hairColor:[a.hairColor,a.hair_color,character?.hairColor,character?.hair_color],facialStyle:[a.facialStyle,a.facial_style,character?.facialStyle,character?.facial_style]})){for(const v of vals){const n=int(v);if(n!=null){out[dst]=n;break}}}return out}
+  async function build(character){if(!character)return null;const race=raceId(character.race),gender=genderId(character.gender);if(!race||gender==null)return{ready:false,reason:'missing-race-or-gender',race,gender,items:[]};const gear=Array.isArray(character.items)?character.items:Array.isArray(character.gear)?character.gear:Array.isArray(character.equipment)?character.equipment:[];const items=[];for(const item of gear){const slot=viewerSlot(item?.slot??item?.slotId??item?.slot_id);if(!slot||[2,11,12,13,14].includes(slot))continue;const displayId=await resolveAppearance(item);if(displayId)items.push([slot,displayId])}return{ready:true,race,gender,...customization(character),items,sourceCharacter:character.name||'',resolvedItems:items.length};}
+  window.WarRoomCharacterModelManifest={build,raceId,genderId,viewerSlot,directDisplayId,resolveAppearance,appearanceCache};
+})();
