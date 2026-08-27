@@ -46,7 +46,7 @@ jobs:
           if($srcText -match 'app\.WaitForExit\(\)'){ throw 'Launcher still ties server lifetime to transient Edge process' }
           if($srcText -notmatch 'Application\.Run\(new HostContext\(listener, app\)\)'){ throw 'Persistent host message loop missing' }
           if($srcText -notmatch 'listener\.IsListening'){ throw 'HTTP server loop does not follow listener lifetime' }
-          if($srcText -notmatch '\"version\":\\\"1\.7\.23'){ throw 'Health endpoint not bumped to v1.7.23' }
+          if(-not $srcText.Contains('\"version\":\"1.7.23\"')){ throw 'Health endpoint not bumped to v1.7.23' }
           if($srcText -notmatch '/item-icon' -or $srcText -notmatch 'wowhead\.com/tbc/item='){ throw 'Item icon proxy lost' }
           $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
           $src=(Resolve-Path 'build/WarRoomLauncher.cs').Path
