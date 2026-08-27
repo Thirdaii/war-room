@@ -1,7 +1,7 @@
-name: Validate War Room v1.7.14
+name: Validate War Room v1.7.15
 on:
   push:
-    branches: [war-room-v1.7.14-inspect-auto-enrichment]
+    branches: [war-room-v1.7.15-inspect-polish]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,10 +28,10 @@ jobs:
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           python build/v17_integrate.py work/app
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-      - name: Validate Inspect auto enrichment
+      - name: Validate Inspect armory polish
         shell: pwsh
         run: |
-          python -c "import re,pathlib,json; p=pathlib.Path('work/app'); h=(p/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert json.loads((p/'version.json').read_text(encoding='utf-8'))['version']=='1.7.14'; assert h.count('/* War Room v1.7.14 - Inspect Auto Enrichment */')==1; assert 'refreshNames([name]' in h and 'Loading armory data' in h and 'syncWarRoomInspectEnrichment' in h and 'ROLE / SPEC' in h and 'AVG ILVL' in h and 'TALENT BUILD' in h"
+          python -c "import re,pathlib,json; p=pathlib.Path('work/app'); h=(p/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert json.loads((p/'version.json').read_text(encoding='utf-8'))['version']=='1.7.15'; assert h.count('/* War Room v1.7.15 - Inspect Armory Polish */')==1; assert 'setMetric(scope,\'ROLE\',spec)' in h and 'wr-inspect-item-name' in h and 'EQUIPMENT MATRIX • ARMORY VERIFIED' in h and 'AVG ILVL' in h"
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           $tests=@('work/check.js','build/raid_intelligence.js','build/spec_refresh.js','build/armory_refresh_adapter.js','build/raid_intelligence_ui.js','build/character_data_ui.js','build/inspect_enrichment_sync.js')
           foreach($t in $tests){ node --check $t; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE} }
