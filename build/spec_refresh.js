@@ -1,7 +1,21 @@
-/* War Room v1.7.3 - Spec Refresh Bridge */
+/* War Room v1.7.8 - Spec Refresh Bridge */
 (function(){
   const norm=s=>String(s||'').trim();
   const key=s=>norm(s).toLowerCase();
+  const tankSpecs=/^(Protection|Feral.*Tank|Guardian)$/i;
+  const healerSpecs=/^(Holy|Discipline|Restoration)$/i;
+  const meleeSpecs=/^(Arms|Fury|Combat|Assassination|Subtlety|Enhancement|Retribution|Feral)$/i;
+  function deriveRole(activeSpec,className,currentRole=''){
+    const spec=norm(activeSpec),cls=norm(className),cur=norm(currentRole);
+    if(cur&&cur!=='Role TBD'&&cur!=='Unknown')return cur;
+    if(tankSpecs.test(spec))return 'Tank';
+    if(healerSpecs.test(spec))return 'Healer';
+    if(meleeSpecs.test(spec))return 'Melee';
+    if(spec)return 'Ranged';
+    if(['Rogue'].includes(cls))return 'Melee';
+    if(['Mage','Warlock','Hunter'].includes(cls))return 'Ranged';
+    return cur;
+  }
   function rosterRef(){try{if(typeof roster!=='undefined'&&Array.isArray(roster))return roster}catch(e){}return Array.isArray(window.roster)?window.roster:[]}
   function normalizeRecord(r){
     if(!r||!r.name)return null;
@@ -17,6 +31,7 @@
       if(!p){result.missing.push(row.name);return}
       if(!row.activeSpec){result.ignored.push(row.name);return}
       p.spec=row.activeSpec; p.talentSpec=row.activeSpec; p.specUpdatedAt=row.updatedAt; p.specSource=row.source;
+      p.role=deriveRole(row.activeSpec,p.class,p.role);
       if(row.sourceUrl)p.specSourceUrl=row.sourceUrl;
       if(row.secondarySpec){p.secondarySpec=row.secondarySpec;p.dualSpec=row.secondarySpec}
       if(row.talents)p.talentsData=row.talents;
@@ -29,6 +44,6 @@
     window.dispatchEvent(new CustomEvent('warroom:spec-refresh',{detail:result}));
     return result;
   }
-  function exportStatus(){return rosterRef().map(p=>({name:p.name,spec:p.spec||p.talentSpec||'',secondarySpec:p.secondarySpec||p.dualSpec||'',specUpdatedAt:p.specUpdatedAt||p.armoryUpdatedAt||'',specSource:p.specSource||''}))}
-  window.WarRoomSpecRefresh={normalizeRecord,apply,exportStatus,contract:{required:['name','activeSpec'],optional:['secondarySpec','updatedAt','source','sourceUrl','talents']}};
+  function exportStatus(){return rosterRef().map(p=>({name:p.name,spec:p.spec||p.talentSpec||'',role:p.role||'',secondarySpec:p.secondarySpec||p.dualSpec||'',specUpdatedAt:p.specUpdatedAt||p.armoryUpdatedAt||'',specSource:p.specSource||''}))}
+  window.WarRoomSpecRefresh={normalizeRecord,apply,deriveRole,exportStatus,contract:{required:['name','activeSpec'],optional:['secondarySpec','updatedAt','source','sourceUrl','talents']}};
 })();
