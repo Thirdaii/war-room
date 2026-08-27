@@ -149,15 +149,28 @@ internal static class WarRoomLauncher
     {
         string name = ctx.Request.QueryString["name"] ?? "";
         if (string.IsNullOrWhiteSpace(name)) { Write(ctx, 400, "application/json", "{\"error\":\"Missing character name\"}"); return; }
-        string slug = Slug(name);
-        string url = "https://classic-armory.org/character/us/tbc-anniversary/dreamscythe/" + Uri.EscapeDataString(slug);
-        using (var wc = new WebClient())
+
+        string realm = "dreamscythe";
+        string region = "us";
+        string encodedName = Uri.EscapeDataString(name.Trim());
+        string url = "https://classicarmory.gg/api/character/" + region + "/" + realm + "/" + encodedName + "?ns=classicann";
+
+        try
         {
-            wc.Headers[HttpRequestHeader.UserAgent] = "WarRoom/1.7.8";
-            wc.Headers[HttpRequestHeader.Accept] = "application/json,text/html;q=0.9,*/*;q=0.8";
-            string body = wc.DownloadString(url);
-            string type = wc.ResponseHeaders != null ? wc.ResponseHeaders[HttpResponseHeader.ContentType] : null;
-            Write(ctx, 200, string.IsNullOrWhiteSpace(type) ? "text/html; charset=utf-8" : type, body);
+            using (var wc = new WebClient())
+            {
+                wc.Headers[HttpRequestHeader.UserAgent] = "WarRoom/1.7.9";
+                wc.Headers[HttpRequestHeader.Accept] = "application/json";
+                string body = wc.DownloadString(url);
+                Write(ctx, 200, "application/json; charset=utf-8", body);
+            }
+        }
+        catch (WebException ex)
+        {
+            var response = ex.Response as HttpWebResponse;
+            int status = response != null ? (int)response.StatusCode : 502;
+            string message = response != null ? ("Armory request failed (" + status + ")") : ex.Message;
+            Write(ctx, status >= 400 && status < 600 ? status : 502, "application/json", "{\"error\":\"" + JsonEscape(message) + "\"}");
         }
     }
 
@@ -193,17 +206,6 @@ internal static class WarRoomLauncher
             case ".ico": return "image/x-icon";
             default: return "application/octet-stream";
         }
-    }
-
-    private static string Slug(string s)
-    {
-        var sb = new StringBuilder(); bool dash = false;
-        foreach (char c in s.ToLowerInvariant())
-        {
-            if (char.IsLetterOrDigit(c)) { sb.Append(c); dash = false; }
-            else if (!dash && sb.Length > 0) { sb.Append('-'); dash = true; }
-        }
-        return sb.ToString().Trim('-');
     }
 
     private static void Write(HttpListenerContext ctx, int status, string type, string body)
