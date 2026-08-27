@@ -1,7 +1,7 @@
-name: Validate War Room v1.7.11
+name: Validate War Room v1.7.12
 on:
   push:
-    branches: [war-room-v1.7.11-character-data-ui]
+    branches: [war-room-v1.7.12-proxy-diagnostics]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,21 +28,22 @@ jobs:
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           python build/v17_integrate.py work/app
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-      - name: Validate visible character data hydration
+      - name: Validate proxy diagnostics and character hydration
         shell: pwsh
         run: |
-          python -c "import re,pathlib,json; p=pathlib.Path('work/app'); h=(p/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert json.loads((p/'version.json').read_text(encoding='utf-8'))['version']=='1.7.11'; assert h.count('/* War Room v1.7 - TBC Phase 3 Raid Intelligence */')==1; assert h.count('/* War Room v1.7.9 - ClassicArmory Structured API */')==1; assert h.count('/* War Room v1.7.11 - Raid Character Data UI */')==1; assert 'Raid Character Data' in h and 'renderWarRoomCharacterData' in h and 'wr-character-row' in h and '/armory?name=' in h and 'classicarmory.gg' in h"
+          python -c "import re,pathlib,json; p=pathlib.Path('work/app'); h=(p/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert json.loads((p/'version.json').read_text(encoding='utf-8'))['version']=='1.7.12'; assert h.count('/* War Room v1.7.12 - ClassicArmory Proxy Diagnostics */')==1; assert h.count('/* War Room v1.7.12 - Raid Character Data Diagnostics */')==1; assert 'Armory bridge' in h and 'proxy status' in h and '/armory?name=' in h and 'classicarmory.gg' in h"
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           $tests=@('work/check.js','build/raid_intelligence.js','build/spec_refresh.js','build/armory_refresh_adapter.js','build/raid_intelligence_ui.js','build/character_data_ui.js')
           foreach($t in $tests){ node --check $t; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE} }
           $runs=@('build/raid_intelligence_test.js','build/spec_freshness_test.js','build/spec_refresh_test.js','build/armory_refresh_adapter_test.js','build/group_diagnostics_test.js','build/character_hydration_test.js','build/classicarmory_gg_contract_test.js')
           foreach($t in $runs){ node $t; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE} }
-      - name: Compile and validate native localhost launcher
+      - name: Compile and validate TLS-enabled native proxy
         shell: pwsh
         run: |
           $srcText=Get-Content build/WarRoomLauncher.cs -Raw
           if($srcText -notmatch '--user-data-dir='){ throw 'Launcher missing dedicated Edge profile' }
-          if($srcText -notmatch 'app.WaitForExit\(\)'){ throw 'Launcher no longer tracks dedicated app lifetime' }
+          if($srcText -notmatch 'SecurityProtocolType\.Tls12'){ throw 'Launcher does not force TLS 1.2 for armory HTTPS' }
+          if($srcText -notmatch 'upstream-request'){ throw 'Launcher missing explicit upstream diagnostics' }
           if($srcText -notmatch 'classicarmory\.gg/api/character/'){ throw 'Launcher missing structured armory proxy endpoint' }
           $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
           $src=(Resolve-Path 'build/WarRoomLauncher.cs').Path
