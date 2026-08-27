@@ -4,7 +4,6 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
-using System.Web;
 using System.Windows.Forms;
 
 internal static class WarRoomLauncher
