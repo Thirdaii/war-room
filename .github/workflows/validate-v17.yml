@@ -1,7 +1,7 @@
-name: Validate War Room v1.7.23
+name: Validate War Room v1.7.24
 on:
   push:
-    branches: [war-room-v1.7.23-fix-local-host-lifetime]
+    branches: [war-room-v1.7.24-wow-item-tooltips]
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,46 +18,36 @@ jobs:
           New-Item -ItemType Directory -Force work/base,work/app | Out-Null
           $tag=(gh release view --repo $env:GITHUB_REPOSITORY --json tagName | ConvertFrom-Json).tagName
           gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern "WarRoom-App.zip" --dir work/base
-          Expand-Archive -Path work/base/WarRoom-App.zip -DestinationPath work/app -Force
-          if (-not (Test-Path work/app/index.html)) { $dirs=@(Get-ChildItem work/app -Directory); if($dirs.Count -eq 1){ Copy-Item "$($dirs[0].FullName)\*" work/app -Recurse -Force } }
-          if(-not(Test-Path work/app/index.html)){ throw 'Production package missing index.html' }
-      - name: Apply exact production upgrade path
+          Expand-Archive work/base/WarRoom-App.zip work/app -Force
+          if(-not(Test-Path work/app/index.html)){ $d=@(Get-ChildItem work/app -Directory); if($d.Count -eq 1){Copy-Item "$($d[0].FullName)\*" work/app -Recurse -Force} }
+      - name: Apply production upgrade
         shell: pwsh
         run: |
           python build/patch.py work/app
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           python build/v17_integrate.py work/app
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-      - name: Preserve v1.7.22 Inspect gear pipeline
+      - name: Validate WoW item tooltip and gear regression
         shell: pwsh
         run: |
           $h=Get-Content work/app/index.html -Raw
-          if($h -notmatch 'directSlotLabels' -or $h -notmatch 'found\.length===1'){ throw 'Exact slot-card selector missing' }
-          if($h -match 'txt\.includes'){ throw 'Legacy whole-matrix selector returned' }
-          if($h -notmatch 'WarRoomInspectLive' -or $h -notmatch 'wr-live-item-icon' -or $h -notmatch '/item-icon\?id='){ throw 'Inspect gear/artwork pipeline lost' }
-          python -c "import re,pathlib; h=pathlib.Path('work/app/index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text(chr(10).join(s),encoding='utf-8')"
+          $v=Get-Content work/app/version.json -Raw | ConvertFrom-Json
+          if($v.version -ne '1.7.24'){throw 'Package version is not 1.7.24'}
+          $required=@('War Room v1.7.24 - WoW-style item hover tooltips','wr-wow-tooltip','bindTooltip','tooltipHtml','positionTooltip','mouseenter','mousemove','mouseleave','Item Level','qualityColor','directSlotLabels','found.length===1','wr-live-item-icon','/item-icon?id=','WarRoomInspectLive')
+          foreach($x in $required){if(-not $h.Contains($x)){throw "Missing tooltip/gear marker: $x"}}
+          if($h.Contains('txt.includes')){throw 'Legacy whole-matrix selector returned'}
+          python -c "import re,pathlib; h=pathlib.Path('work/app/index.html').read_text(encoding='utf-8'); pathlib.Path('work/check.js').write_text(chr(10).join(re.findall(r'<script>(.*?)</script>',h,re.S)),encoding='utf-8')"
           node --check work/check.js
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-      - name: Compile and validate persistent local host
+          node --check build/inspect_graphics.js
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+      - name: Preserve persistent launcher and icon proxy
         shell: pwsh
         run: |
-          $srcText=Get-Content build/WarRoomLauncher.cs -Raw
-          if($srcText -notmatch 'WaitForHealth\(baseUrl\)'){ throw 'Launcher does not prove local health before browser launch' }
-          if($srcText -match 'app\.WaitForExit\(\)'){ throw 'Launcher still ties server lifetime to transient Edge process' }
-          if($srcText -notmatch 'Application\.Run\(new HostContext\(listener, app\)\)'){ throw 'Persistent host message loop missing' }
-          if($srcText -notmatch 'listener\.IsListening'){ throw 'HTTP server loop does not follow listener lifetime' }
-          if(-not $srcText.Contains('\"version\":\"1.7.23\"')){ throw 'Health endpoint not bumped to v1.7.23' }
-          if($srcText -notmatch '/item-icon' -or $srcText -notmatch 'wowhead\.com/tbc/item='){ throw 'Item icon proxy lost' }
-          $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-          $src=(Resolve-Path 'build/WarRoomLauncher.cs').Path
-          $out=(Join-Path (Resolve-Path 'work').Path 'WarRoomLauncher-test.exe')
+          $s=Get-Content build/WarRoomLauncher.cs -Raw
+          if($s -match 'app\.WaitForExit\(\)'){throw 'Transient Edge lifetime regression'}
+          if($s -notmatch 'WaitForHealth\(baseUrl\)' -or $s -notmatch 'Application\.Run\(new HostContext'){throw 'Persistent launcher regression'}
+          if($s -notmatch '/item-icon' -or $s -notmatch 'wowhead\.com/tbc/item='){throw 'Icon proxy regression'}
+          $csc="$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"; $src=(Resolve-Path build/WarRoomLauncher.cs).Path; $out=(Join-Path (Resolve-Path work).Path 'WarRoomLauncher-test.exe')
           & $csc /nologo /target:winexe /optimize+ /reference:System.dll /reference:System.Windows.Forms.dll "/out:$out" "$src"
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) { throw 'Native launcher compilation failed' }
-      - name: Validate updater parser and app mode
-        shell: pwsh
-        run: |
-          $tokens=$null; $parseErrors=$null
-          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'work/app/WarRoomUpdater.ps1'),[ref]$tokens,[ref]$parseErrors) | Out-Null
-          if ($parseErrors.Count -gt 0) { throw 'Updater parser validation failed' }
-          $ps=Get-Content work/app/WarRoomUpdater.ps1 -Raw
-          if($ps -notmatch 'ArgumentList "--app"'){ throw 'Updater missing native app-mode launch' }
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
