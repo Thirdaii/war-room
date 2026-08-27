@@ -1,0 +1,58 @@
+name: Validate War Room v1.7.26
+on:
+  push:
+    branches: [war-room-v1.7.26-character-model-viewer]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download latest production base
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force work/base,work/app | Out-Null
+          $tag=(gh release view --repo $env:GITHUB_REPOSITORY --json tagName | ConvertFrom-Json).tagName
+          gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern "WarRoom-App.zip" --dir work/base
+          Expand-Archive work/base/WarRoom-App.zip work/app -Force
+          if(-not(Test-Path work/app/index.html)){ $d=@(Get-ChildItem work/app -Directory); if($d.Count -eq 1){Copy-Item "$($d[0].FullName)\*" work/app -Recurse -Force} }
+      - name: Apply v1.7.26 production upgrade
+        shell: pwsh
+        run: |
+          python build/patch.py work/app
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          python build/v17_integrate.py work/app
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+      - name: Validate model manifest and v1.7.25 regression gates
+        shell: pwsh
+        run: |
+          $h=Get-Content work/app/index.html -Raw
+          $v=Get-Content work/app/version.json -Raw | ConvertFrom-Json
+          if($v.version -ne '1.7.26'){throw 'Package version is not 1.7.26'}
+          $required=@('War Room v1.7.26 - Character model manifest builder','WarRoomCharacterModelManifest','resolveAppearance','directDisplayId','appearanceCache','/item-appearance?id=','WarRoomInspectLive','wr-wow-tooltip','resolveLive','gemHtml','Enchant:','gemCache','enchantmentCache','wr-live-item-icon','/item-icon?id=','directSlotLabels','found.length===1')
+          foreach($x in $required){if(-not $h.Contains($x)){throw "Missing v1.7.26 marker: $x"}}
+          if($h.Contains('txt.includes')){throw 'Legacy whole-matrix selector returned'}
+          python -c "import re,pathlib; h=pathlib.Path('work/app/index.html').read_text(encoding='utf-8'); pathlib.Path('work/check.js').write_text(chr(10).join(re.findall(r'<script>(.*?)</script>',h,re.S)),encoding='utf-8')"
+          node --check work/check.js
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node --check build/character_model_manifest.js
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node --check build/inspect_graphics.js
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node --check build/armory_refresh_adapter.js
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+      - name: Validate native appearance resolver and launcher
+        shell: pwsh
+        run: |
+          $s=Get-Content build/WarRoomLauncher.cs -Raw
+          foreach($x in @('/item-appearance','HandleItemAppearance','ItemAppearanceCache','ExtractDisplayId','itemAppearances','WarRoom/1.7.26','"version\":\"1.7.26','/gem','/enchantment','/item-icon')){if(-not $s.Contains($x)){throw "Missing native v1.7.26 marker: $x"}}
+          if($s -match 'app\.WaitForExit\(\)'){throw 'Transient Edge lifetime regression'}
+          if($s -notmatch 'WaitForHealth\(baseUrl\)' -or $s -notmatch 'Application\.Run\(new HostContext'){throw 'Persistent launcher regression'}
+          if($s -notmatch 'wowhead\.com/tbc/item='){throw 'TBC item upstream regression'}
+          $csc="$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"; $src=(Resolve-Path build/WarRoomLauncher.cs).Path; $out=(Join-Path (Resolve-Path work).Path 'WarRoomLauncher-test.exe')
+          & $csc /nologo /target:winexe /optimize+ /reference:System.dll /reference:System.Windows.Forms.dll "/out:$out" "$src"
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
