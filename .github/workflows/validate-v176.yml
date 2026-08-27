@@ -27,19 +27,22 @@ jobs:
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           python build/v17_integrate.py work/app
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-      - name: Validate model manifest and v1.7.25 regression gates
+      - name: Validate model manifest, 3D renderer bridge, and v1.7.25 regression gates
         shell: pwsh
         run: |
           $h=Get-Content work/app/index.html -Raw
           $v=Get-Content work/app/version.json -Raw | ConvertFrom-Json
           if($v.version -ne '1.7.26'){throw 'Package version is not 1.7.26'}
-          $required=@('War Room v1.7.26 - Character model manifest builder','WarRoomCharacterModelManifest','resolveAppearance','directDisplayId','appearanceCache','/item-appearance?id=','WarRoomInspectLive','wr-wow-tooltip','resolveLive','gemHtml','Enchant:','gemCache','enchantmentCache','wr-live-item-icon','/item-icon?id=','directSlotLabels','found.length===1')
+          $required=@('War Room v1.7.26 - Character model manifest builder','War Room v1.7.26 - Isolated 3D character model stage','WarRoomCharacterModelManifest','WarRoomCharacterModelStage','resolveAppearance','directDisplayId','appearanceCache','/item-appearance?id=','CONTENT_PATH','generateModels','classic','noCharCustomization','setDistance','destroy','warroom:inspect-character-ready','wr-character-model-stage','Drag to rotate','Wheel to zoom','WarRoomInspectLive','wr-wow-tooltip','resolveLive','gemHtml','Enchant:','gemCache','enchantmentCache','wr-live-item-icon','/item-icon?id=','directSlotLabels','found.length===1')
           foreach($x in $required){if(-not $h.Contains($x)){throw "Missing v1.7.26 marker: $x"}}
           if($h.Contains('txt.includes')){throw 'Legacy whole-matrix selector returned'}
+          if($h.Contains('||document.body')){throw 'Unsafe Inspect fallback detected'}
           python -c "import re,pathlib; h=pathlib.Path('work/app/index.html').read_text(encoding='utf-8'); pathlib.Path('work/check.js').write_text(chr(10).join(re.findall(r'<script>(.*?)</script>',h,re.S)),encoding='utf-8')"
           node --check work/check.js
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           node --check build/character_model_manifest.js
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node --check build/character_model_stage.js
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           node --check build/inspect_graphics.js
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
