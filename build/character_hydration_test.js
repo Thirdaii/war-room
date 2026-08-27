@@ -1,0 +1,18 @@
+const fs=require('fs');
+global.window=global;
+global.CustomEvent=function(n,o){this.type=n;this.detail=o?.detail};
+global.dispatchEvent=()=>{};
+global.roster=[{name:'Tankadin',class:'Paladin',rank:'Raider'},{name:'Shadowbro',class:'Priest',rank:'Raider'}];
+global.renderRoster=()=>{};global.renderRaid=()=>{};
+eval(fs.readFileSync(__dirname+'/spec_refresh.js','utf8'));
+const payload=[{name:'Tankadin',activeSpec:'Protection',secondarySpec:'Retribution',updatedAt:new Date().toISOString(),source:'ClassicArmory',talents:'0/49/12',gearscore:2450,ilvl:128.4,items:[{slot:'Head',name:'Faceguard of Determination',id:32354,ilvl:141}]},{name:'Shadowbro',activeSpec:'Shadow',updatedAt:new Date().toISOString(),source:'ClassicArmory',talents:{tree:'Shadow'},gearscore:2320,ilvl:124.1,items:[{slot:'Main Hand',name:'Example Staff',id:1,ilvl:133}]}];
+const r=window.WarRoomSpecRefresh.apply(payload);
+if(r.updated.length!==2)throw new Error('Expected both raiders to hydrate');
+const tank=roster[0],shadow=roster[1];
+if(tank.spec!=='Protection'||tank.role!=='Tank')throw new Error('Protection Paladin role hydration failed');
+if(tank.secondarySpec!=='Retribution')throw new Error('Off-spec hydration failed');
+if(tank.gearscore!==2450||tank.ilvl!==128.4)throw new Error('Gear score/iLvl hydration failed');
+if(!Array.isArray(tank.gear)||tank.gear[0].name!=='Faceguard of Determination')throw new Error('Equipped gear hydration failed');
+if(tank.talents!=='0/49/12')throw new Error('Talent build hydration failed');
+if(shadow.role!=='Ranged'||shadow.spec!=='Shadow')throw new Error('Shadow Priest role hydration failed');
+console.log('Character hydration regression passed');
