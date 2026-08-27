@@ -13,9 +13,9 @@ if not scripts: raise RuntimeError('No inline application script found')
 m=scripts[-1]; body=m.group(1)
 if JS_MARK in body: body=body[:body.index(JS_MARK)].rstrip()
 h=h[:m.start()]+'<script>'+body+'\n'+engine+'\n'+refresh+'\n'+armory+'\n'+ui+'\n</script>'+h[m.end():]
-h=re.sub(r'WAR ROOM APP • (?:COMMAND CENTER 1\.6|RAID INTELLIGENCE 1\.7(?:\.[0-9]+)?)','WAR ROOM APP • RAID INTELLIGENCE 1.7.9',h,count=1)
-h=re.sub(r'WAR ROOM v1\.(?:6|7(?:\.[0-9]+)?) • (?:NATIVE LAUNCHER|TBC RAID INTELLIGENCE)','WAR ROOM v1.7.9 • TBC RAID INTELLIGENCE',h,count=1)
-v=json.loads(version_file.read_text(encoding='utf-8')); v['version']='1.7.9'; v['notes']=['Character refresh now uses the structured classicarmory.gg character API','Spec, talent tree, item level and equipped gear map to the live API schema','Native localhost proxy no longer depends on blocked classic-armory.org server requests','Refresh timeout/retry protections retained','Larger cleaner Raid Intelligence group presentation retained']; version_file.write_text(json.dumps(v,indent=2),encoding='utf-8'); index.write_text(h,encoding='utf-8')
+h=re.sub(r'WAR ROOM APP • (?:COMMAND CENTER 1\.6|RAID INTELLIGENCE 1\.7(?:\.[0-9]+)?)','WAR ROOM APP • RAID INTELLIGENCE 1.7.10',h,count=1)
+h=re.sub(r'WAR ROOM v1\.(?:6|7(?:\.[0-9]+)?) • (?:NATIVE LAUNCHER|TBC RAID INTELLIGENCE)','WAR ROOM v1.7.10 • TBC RAID INTELLIGENCE',h,count=1)
+v=json.loads(version_file.read_text(encoding='utf-8')); v['version']='1.7.10'; v['notes']=['Native localhost host remains alive for the War Room app window','Dedicated Edge app profile prevents process handoff from killing the local server','Structured armory spec, talents, item level and equipped gear retained','Refresh timeout/retry protections retained','Larger cleaner Raid Intelligence group presentation retained']; version_file.write_text(json.dumps(v,indent=2),encoding='utf-8'); index.write_text(h,encoding='utf-8')
 if updater.exists():
     ps=updater.read_text(encoding='utf-8-sig')
     replacement='function Start-WarRoom { if(-not(Test-Path $IndexFile)){throw "index.html not found"}; Status "Opening the War Room..."; $exe=Join-Path $AppRoot "War Room.exe"; if(Test-Path $exe){ Start-Process -FilePath $exe -ArgumentList "--app" -WorkingDirectory $AppRoot; return }; Start-Process $IndexFile }'
@@ -23,7 +23,7 @@ if updater.exists():
     updater.write_text(ps,encoding='utf-8-sig')
 final=index.read_text(encoding='utf-8')
 for marker in (CSS_MARK,JS_MARK,REFRESH_MARK,ARMORY_MARK,UI_MARK,'WarRoomArmoryRefresh','WarRoomSpecRefresh','/armory?name=','wr-party-confidence','classicarmory.gg'):
-    if marker not in final: raise RuntimeError(f'Missing v1.7.9 integration marker: {marker}')
-if final.count(JS_MARK)!=1 or final.count(UI_MARK)!=1 or final.count(REFRESH_MARK)!=1 or final.count(ARMORY_MARK)!=1: raise RuntimeError('Duplicate v1.7.9 modules detected after upgrade')
+    if marker not in final: raise RuntimeError(f'Missing v1.7.10 integration marker: {marker}')
+if final.count(JS_MARK)!=1 or final.count(UI_MARK)!=1 or final.count(REFRESH_MARK)!=1 or final.count(ARMORY_MARK)!=1: raise RuntimeError('Duplicate v1.7.10 modules detected after upgrade')
 if updater.exists() and 'Start-Process -FilePath $exe -ArgumentList "--app"' not in updater.read_text(encoding='utf-8-sig'): raise RuntimeError('Updater did not wire native app mode')
-print('War Room v1.7.9 structured armory integration complete')
+print('War Room v1.7.10 loopback host integration complete')
