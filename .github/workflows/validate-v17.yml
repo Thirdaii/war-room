@@ -1,7 +1,7 @@
-name: Validate War Room v1.7.15
+name: Validate War Room v1.7.16
 on:
   push:
-    branches: [war-room-v1.7.15-inspect-polish]
+    branches: [war-room-v1.7.16-inspect-graphics]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,12 +28,12 @@ jobs:
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           python build/v17_integrate.py work/app
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-      - name: Validate Inspect armory polish
+      - name: Validate Inspect item graphics
         shell: pwsh
         run: |
-          python -c "import re,pathlib,json; p=pathlib.Path('work/app'); h=(p/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert json.loads((p/'version.json').read_text(encoding='utf-8'))['version']=='1.7.15'; assert h.count('/* War Room v1.7.15 - Inspect Armory Polish */')==1; assert 'setMetric(scope,\'ROLE\',spec)' in h and 'wr-inspect-item-name' in h and 'EQUIPMENT MATRIX • ARMORY VERIFIED' in h and 'AVG ILVL' in h"
+          python -c "import re,pathlib,json; p=pathlib.Path('work/app'); h=(p/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert json.loads((p/'version.json').read_text(encoding='utf-8'))['version']=='1.7.16'; assert h.count('/* War Room v1.7.16 - Inspect Item Graphics */')==1; assert 'applyWarRoomInspectGraphics' in h and 'wr-live-item-icon' in h and 'wow.zamimg.com' in h and 'LIVE ARMORY EQUIPMENT' in h and 'icon:x.icon' in h"
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-          $tests=@('work/check.js','build/raid_intelligence.js','build/spec_refresh.js','build/armory_refresh_adapter.js','build/raid_intelligence_ui.js','build/character_data_ui.js','build/inspect_enrichment_sync.js')
+          $tests=@('work/check.js','build/raid_intelligence.js','build/spec_refresh.js','build/armory_refresh_adapter.js','build/raid_intelligence_ui.js','build/character_data_ui.js','build/inspect_enrichment_sync.js','build/inspect_graphics.js')
           foreach($t in $tests){ node --check $t; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE} }
           $runs=@('build/raid_intelligence_test.js','build/spec_freshness_test.js','build/spec_refresh_test.js','build/armory_refresh_adapter_test.js','build/group_diagnostics_test.js','build/character_hydration_test.js','build/classicarmory_gg_contract_test.js')
           foreach($t in $runs){ node $t; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE} }
