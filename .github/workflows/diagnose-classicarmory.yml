@@ -10,38 +10,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download production roster and probe armory sources
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Inspect alternate armory payload
         run: |
           set -e
-          mkdir -p work/app
-          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
-          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern 'WarRoom-App.zip' --dir work
-          unzip -q work/WarRoom-App.zip -d work/app
+          url='https://classicarmory.gg/character/us/dreamscythe/misanthropi?ns=classicann'
+          curl -LfsS -A 'Mozilla/5.0' "$url" -o work.html
           python - <<'PY'
           from pathlib import Path
-          import re,json
-          h=Path('work/app/index.html').read_text(encoding='utf-8')
-          m=re.search(r'const\s+roster\s*=\s*(\[[\s\S]*?\]);',h)
-          rows=json.loads(m.group(1)) if m else []
-          names=[x.get('name','') for x in rows if x.get('level')==70][:16]
-          Path('work/names.txt').write_text('\n'.join(names),encoding='utf-8')
-          print('ROSTER SAMPLE:',names)
+          import re,html
+          t=Path('work.html').read_text(encoding='utf-8',errors='ignore')
+          print('TITLE:',(re.search(r'<title>(.*?)</title>',t,re.S) or [None,''])[1])
+          print('LENGTH:',len(t))
+          keys=['item level','gearscore','specialization','spec','talent','equipment','equipped','itemLevel','averageItemLevel','specializations','active_spec','activeSpec']
+          low=t.lower()
+          for k in keys:
+              print('\n===',k,'===')
+              start=0;shown=0
+              while shown<6:
+                  i=low.find(k.lower(),start)
+                  if i<0: break
+                  print(html.unescape(t[max(0,i-220):i+520]).replace('\n',' ')[:900])
+                  start=i+len(k);shown+=1
+          print('\n=== JSON/SCRIPT HINTS ===')
+          for m in re.finditer(r'<script[^>]*>([\s\S]*?)</script>',t,re.I):
+              s=m.group(1)
+              if any(k in s.lower() for k in ('misanthropi','itemlevel','specialization','equipment','talent')):
+                  print(s[:5000])
           PY
-          printf 'classic-armory.org: '; curl -L -sS -o /dev/null -w '%{http_code}\n' -A 'Mozilla/5.0' https://classic-armory.org/ || true
-          printf 'classicarmory.gg: '; curl -L -sS -o /dev/null -w '%{http_code}\n' -A 'Mozilla/5.0' https://classicarmory.gg/ || true
-          echo '=== roster character probes ==='
-          while read -r name; do
-            [ -z "$name" ] && continue
-            slug=$(python -c 'import sys,unicodedata,re; s=unicodedata.normalize("NFKD",sys.argv[1]); s="".join(c for c in s if not unicodedata.combining(c)); print(re.sub(r"[^a-z0-9]+","-",s.lower()).strip("-"))' "$name")
-            url="https://classicarmory.gg/character/us/dreamscythe/$slug?ns=classicann"
-            code=$(curl -L -sS -o work/char.html -w '%{http_code}' -A 'Mozilla/5.0' "$url" || true)
-            title=$(grep -oE '<title>[^<]+' work/char.html | head -n1 | sed 's/<title>//' || true)
-            echo "$name -> $code | $title"
-            if [ "$code" = "200" ] && ! grep -qiE 'Character not found|Something went wrong' work/char.html; then
-              echo "FOUND: $url"
-              grep -oE '.{0,100}(GearScore|Item Level|ilvl|specialization|talent|equipment|spec).{0,180}' work/char.html | head -n 50 || true
-              break
-            fi
-          done < work/names.txt
