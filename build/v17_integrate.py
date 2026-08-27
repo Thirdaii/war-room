@@ -2,9 +2,7 @@ from pathlib import Path
 import json,re,sys
 root=Path(sys.argv[1]); index=root/'index.html'; version_file=root/'version.json'; updater=root/'WarRoomUpdater.ps1'; repo=Path(__file__).parent
 h=index.read_text(encoding='utf-8'); css=(repo/'raid_intelligence.css').read_text(encoding='utf-8'); engine=(repo/'raid_intelligence.js').read_text(encoding='utf-8'); refresh=(repo/'spec_refresh.js').read_text(encoding='utf-8'); armory=(repo/'armory_refresh_adapter.js').read_text(encoding='utf-8'); ui=(repo/'raid_intelligence_ui.js').read_text(encoding='utf-8'); charui=(repo/'character_data_ui.js').read_text(encoding='utf-8'); inspectui=(repo/'inspect_enrichment_sync.js').read_text(encoding='utf-8'); graphics=(repo/'inspect_graphics.js').read_text(encoding='utf-8'); manifest=(repo/'character_model_manifest.js').read_text(encoding='utf-8')
-CSS_MARK='/* War Room v1.7 Raid Intelligence */'; JS_MARK='/* War Room v1.7 - TBC Phase 3 Raid Intelligence */'; INSPECT_MARK='/* War Room v1.7.21 - Inspect enrichment publishes live character binding */'; GRAPHICS_MARK='/* War Room v1.7.25 - Live gems and enchantments in WoW tooltips */'; ARMORY_MARK='/* War Room v1.7.25 - Live gem and enchantment normalization */'; MODEL_MARK='/* War Room v1.7.26 - Character model manifest builder */'
-ARMORY_MARK_ALT='/* War Room v1.7.25 - Live gem and enchant normalization */'
-if ARMORY_MARK not in armory and ARMORY_MARK_ALT in armory: armory=armory.replace(ARMORY_MARK_ALT,ARMORY_MARK,1)
+CSS_MARK='/* War Room v1.7 Raid Intelligence */'; JS_MARK='/* War Room v1.7 - TBC Phase 3 Raid Intelligence */'; INSPECT_MARK='/* War Room v1.7.21 - Inspect enrichment publishes live character binding */'; GRAPHICS_MARK='/* War Room v1.7.25 - Live gems and enchantments in WoW tooltips */'; ARMORY_MARK='/* War Room v1.7.26 - Character model metadata + live gem and enchant normalization */'; MODEL_MARK='/* War Room v1.7.26 - Character model manifest builder */'
 if CSS_MARK in h:
  start=h.index(CSS_MARK); end=h.find('</style>',start); h=h[:start]+css+'\n'+h[end:]
 else: h=h.replace('</style>','\n'+css+'\n</style>',1)
