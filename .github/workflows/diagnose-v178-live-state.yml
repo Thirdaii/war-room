@@ -21,8 +21,13 @@ jobs:
             d=$(find work/app -mindepth 1 -maxdepth 1 -type d | head -n1)
             [ -n "$d" ] && cp -r "$d"/* work/app/
           fi
-      - name: Inspect live intelligence inputs
+      - name: Inspect packaged app host and intelligence inputs
         run: |
+          echo '=== PACKAGE ROOT ==='
+          find work/app -maxdepth 1 -type f -printf '%f\n' | sort
+          echo '=== LAUNCH APP WINDOW ==='
+          if [ -f work/app/LaunchAppWindow.ps1 ]; then sed -n '1,260p' work/app/LaunchAppWindow.ps1; else echo 'NOT FOUND'; fi
+          echo '=== INDEX INTELLIGENCE INPUTS ==='
           cat > work/inspect.py <<'PY'
           from pathlib import Path
           import re
