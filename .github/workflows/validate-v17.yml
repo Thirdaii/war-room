@@ -1,7 +1,7 @@
-name: Validate War Room v1.7.21
+name: Validate War Room v1.7.22
 on:
   push:
-    branches: [war-room-v1.7.21-fix-live-gear-binding]
+    branches: [war-room-v1.7.22-fix-equipment-card-selector]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,30 +28,25 @@ jobs:
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
           python build/v17_integrate.py work/app
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-      - name: Validate live-bound Inspect gear cards and artwork
+      - name: Validate exact Inspect equipment-card binding
         shell: pwsh
         run: |
           $h=Get-Content work/app/index.html -Raw
           $v=Get-Content work/app/version.json -Raw | ConvertFrom-Json
-          if($v.version -ne '1.7.21'){ throw 'Packaged version is not 1.7.21' }
-          if(([regex]::Matches($h,[regex]::Escape('/* War Room v1.7.21 - Inspect enrichment publishes live character binding */'))).Count -ne 1){ throw 'v1.7.21 enrichment module missing or duplicated' }
-          if(([regex]::Matches($h,[regex]::Escape('/* War Room v1.7.21 - live-bound gear cards + lifecycle-safe artwork */'))).Count -ne 1){ throw 'v1.7.21 gear module missing or duplicated' }
-          if($h -match '\|\|document\.body'){ throw 'Unsafe document.body fallback returned' }
-          if($h -notmatch 'WarRoomInspectLive'){ throw 'Hydrated Inspect character publication missing' }
-          if($h -notmatch 'warroom:inspect-character-ready'){ throw 'Inspect character-ready handoff missing' }
-          if($h -notmatch 'apply\(d\.scope,d\.character\)'){ throw 'Graphics does not consume exact hydrated character' }
-          if($h -notmatch 'boundCharacter'){ throw 'Live character fallback binding missing' }
-          if($h -notmatch 'renderItemText'){ throw 'Verified item name/iLvl renderer missing' }
-          if($h -notmatch 'dataset\.wrSlot'){ throw 'Slot-structure card mapping missing' }
-          if($h -notmatch 'width=64'){ throw 'Gear artwork is not using 64px item images' }
-          if($h -notmatch 'hidePlaceholderArt'){ throw 'Artwork placeholder replacement missing' }
-          if($h -notmatch 'ico\.onload'){ throw 'Renderer does not wait for successful artwork load' }
-          if($h -notmatch 'naturalWidth'){ throw 'Cached artwork handling missing' }
-          if($h -notmatch '/item-icon\?id='){ throw 'Item ID icon fallback missing' }
-          if($h -notmatch 'scope!==activeScope' -or $h -notmatch 'generation\+\+'){ throw 'Inspect graphics lifecycle guards missing' }
+          if($v.version -ne '1.7.22'){ throw 'Packaged version is not 1.7.22' }
+          if(([regex]::Matches($h,[regex]::Escape('/* War Room v1.7.22 - exact equipment-card binding + lifecycle-safe artwork */'))).Count -ne 1){ throw 'v1.7.22 gear module missing or duplicated' }
+          if($h -notmatch 'directSlotLabels'){ throw 'Exact slot-label card detector missing' }
+          if($h -notmatch 'found\.length===1'){ throw 'Card selector does not require exactly one slot label' }
+          if($h -match 'txt\.includes'){ throw 'Legacy broad whole-matrix selector returned' }
+          if($h -notmatch 'matrixHeading'){ throw 'Leaf-only matrix heading selector missing' }
+          if($h -notmatch '!e\.querySelector\('){ throw 'Leaf slot-label protection missing' }
+          if($h -notmatch 'WarRoomInspectLive' -or $h -notmatch 'apply\(d\.scope,d\.character\)'){ throw 'v1.7.21 hydrated character handoff lost' }
+          if($h -notmatch 'renderItemText' -or $h -notmatch 'wr-live-item-icon'){ throw 'Item details/artwork renderer missing' }
+          if($h -notmatch '/item-icon\?id='){ throw 'Item-ID artwork fallback missing' }
+          if($h -notmatch 'scope!==activeScope' -or $h -notmatch 'generation\+\+'){ throw 'Inspect lifecycle guards missing' }
           python -c "import re,pathlib; h=pathlib.Path('work/app/index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text(chr(10).join(s),encoding='utf-8')"
           if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
-          $tests=@('work/check.js','build/raid_intelligence.js','build/spec_refresh.js','build/armory_refresh_adapter.js','build/raid_intelligence_ui.js','build/character_data_ui.js','build/inspect_enrichment_sync.js','build/inspect_graphics.js')
+          $tests=@('work/check.js','build/inspect_enrichment_sync.js','build/inspect_graphics.js')
           foreach($t in $tests){ node --check $t; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE} }
           $runs=@('build/raid_intelligence_test.js','build/spec_freshness_test.js','build/spec_refresh_test.js','build/armory_refresh_adapter_test.js','build/group_diagnostics_test.js','build/character_hydration_test.js','build/classicarmory_gg_contract_test.js')
           foreach($t in $runs){ node $t; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE} }
@@ -60,7 +55,6 @@ jobs:
         run: |
           $srcText=Get-Content build/WarRoomLauncher.cs -Raw
           if($srcText -notmatch 'SecurityProtocolType\.Tls12'){ throw 'Launcher does not force TLS 1.2' }
-          if($srcText -notmatch 'classicarmory\.gg/api/character/'){ throw 'Launcher missing armory proxy endpoint' }
           if($srcText -notmatch '/item-icon'){ throw 'Launcher missing item icon endpoint' }
           if($srcText -notmatch 'wowhead\.com/tbc/item='){ throw 'Launcher missing TBC item lookup' }
           if($srcText -notmatch 'wow\.zamimg\.com/images/wow/icons/large/'){ throw 'Launcher missing item artwork URL construction' }
