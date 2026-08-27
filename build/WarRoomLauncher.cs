@@ -14,9 +14,11 @@ internal static class WarRoomLauncher
     private static readonly Dictionary<string,string> ItemIconCache = new Dictionary<string,string>();
     private static readonly Dictionary<string,string> GemCache = new Dictionary<string,string>();
     private static readonly Dictionary<string,string> EnchantmentCache = new Dictionary<string,string>();
+    private static readonly Dictionary<string,string> ItemAppearanceCache = new Dictionary<string,string>();
     private static readonly object ItemIconLock = new object();
     private static readonly object GemLock = new object();
     private static readonly object EnchantmentLock = new object();
+    private static readonly object ItemAppearanceLock = new object();
 
     [STAThread]
     private static void Main(string[] args)
@@ -46,13 +48,14 @@ internal static class WarRoomLauncher
             if(path.Equals("/item-icon",StringComparison.OrdinalIgnoreCase)){HandleItemIcon(ctx);return;}
             if(path.Equals("/gem",StringComparison.OrdinalIgnoreCase)){HandleGem(ctx);return;}
             if(path.Equals("/enchantment",StringComparison.OrdinalIgnoreCase)){HandleEnchantment(ctx);return;}
-            if(path.Equals("/health",StringComparison.OrdinalIgnoreCase)){Write(ctx,200,"application/json","{\"ok\":true,\"version\":\"1.7.25\",\"tls\":\"1.2\",\"itemIcons\":true,\"gems\":true,\"enchantments\":true}");return;}
+            if(path.Equals("/item-appearance",StringComparison.OrdinalIgnoreCase)){HandleItemAppearance(ctx);return;}
+            if(path.Equals("/health",StringComparison.OrdinalIgnoreCase)){Write(ctx,200,"application/json","{\"ok\":true,\"version\":\"1.7.26\",\"tls\":\"1.2\",\"itemIcons\":true,\"gems\":true,\"enchantments\":true,\"itemAppearances\":true}");return;}
             ServeStatic(ctx,path);
         }
         catch(Exception ex){Write(ctx,500,"application/json","{\"error\":\""+JsonEscape(ex.Message)+"\",\"stage\":\"local-host\"}");}
     }
 
-    private static WebClient WowClient(string accept){var wc=new WebClient();wc.Encoding=Encoding.UTF8;wc.Headers[HttpRequestHeader.UserAgent]="Mozilla/5.0 (Windows NT 10.0; Win64; x64) WarRoom/1.7.25";wc.Headers[HttpRequestHeader.Accept]=accept;wc.Headers[HttpRequestHeader.AcceptLanguage]="en-US,en;q=0.9";return wc;}
+    private static WebClient WowClient(string accept){var wc=new WebClient();wc.Encoding=Encoding.UTF8;wc.Headers[HttpRequestHeader.UserAgent]="Mozilla/5.0 (Windows NT 10.0; Win64; x64) WarRoom/1.7.26";wc.Headers[HttpRequestHeader.Accept]=accept;wc.Headers[HttpRequestHeader.AcceptLanguage]="en-US,en;q=0.9";return wc;}
     private static bool ValidId(string id){return Regex.IsMatch(id??"","^[0-9]{1,10}$");}
     private static string Tag(string xml,string tag){var m=Regex.Match(xml??"","<"+Regex.Escape(tag)+"[^>]*>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?</"+Regex.Escape(tag)+">",RegexOptions.IgnoreCase|RegexOptions.Singleline);return m.Success?WebUtility.HtmlDecode(Regex.Replace(m.Groups[1].Value,"<.*?>","")).Trim():"";}
     private static string TooltipText(string xml){var m=Regex.Match(xml??"","<htmlTooltip[^>]*>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?</htmlTooltip>",RegexOptions.IgnoreCase|RegexOptions.Singleline);if(!m.Success)return"";string s=m.Groups[1].Value;s=Regex.Replace(s,"<br\\s*/?>","\n",RegexOptions.IgnoreCase);s=Regex.Replace(s,"<.*?>","");return WebUtility.HtmlDecode(s).Trim();}
@@ -81,6 +84,24 @@ internal static class WarRoomLauncher
     {
         string id=(ctx.Request.QueryString["id"]??"").Trim();if(!ValidId(id)){Write(ctx,400,"application/json","{\"error\":\"Invalid enchantment id\"}");return;}string json=null;lock(EnchantmentLock){EnchantmentCache.TryGetValue(id,out json);}if(string.IsNullOrWhiteSpace(json)){try{using(var wc=WowClient("text/html,*/*")){string html=wc.DownloadString("https://www.wowhead.com/tbc/spell="+id);string name="",effect="";var title=Regex.Match(html??"","<title>(.*?)</title>",RegexOptions.IgnoreCase|RegexOptions.Singleline);if(title.Success){name=WebUtility.HtmlDecode(Regex.Replace(title.Groups[1].Value,"<.*?>","")).Replace(" - Spell - TBC Classic"," ").Trim();}var meta=Regex.Match(html??"","<meta[^>]+name=[\"']description[\"'][^>]+content=[\"'](.*?)[\"']",RegexOptions.IgnoreCase|RegexOptions.Singleline);if(meta.Success)effect=WebUtility.HtmlDecode(meta.Groups[1].Value).Trim();if(!string.IsNullOrWhiteSpace(name)){json="{\"id\":\""+JsonEscape(id)+"\",\"name\":\""+JsonEscape(name)+"\",\"effect\":\""+JsonEscape(effect)+"\"}";}}if(!string.IsNullOrWhiteSpace(json))lock(EnchantmentLock){EnchantmentCache[id]=json;}}catch{}}
         if(string.IsNullOrWhiteSpace(json)){Write(ctx,404,"application/json","{\"error\":\"Enchantment not found\",\"id\":\""+JsonEscape(id)+"\"}");return;}Write(ctx,200,"application/json",json);
+    }
+
+    private static string ExtractDisplayId(string payload)
+    {
+        if(string.IsNullOrWhiteSpace(payload))return"";
+        string[] patterns={"\\\"displayId\\\"\\s*:\\s*(\\d+)","\\\"displayID\\\"\\s*:\\s*(\\d+)","\\\"displayid\\\"\\s*:\\s*(\\d+)","\\\"display_id\\\"\\s*:\\s*(\\d+)","\\\"display\\\"\\s*:\\s*(\\d+)","displayId\\s*[:=]\\s*[\\\"']?(\\d+)","displayID\\s*[:=]\\s*[\\\"']?(\\d+)","displayid\\s*[:=]\\s*[\\\"']?(\\d+)","display_id\\s*[:=]\\s*[\\\"']?(\\d+)"};
+        foreach(string p in patterns){var m=Regex.Match(payload,p,RegexOptions.IgnoreCase);if(m.Success&&ValidId(m.Groups[1].Value)&&m.Groups[1].Value!="0")return m.Groups[1].Value;}
+        return"";
+    }
+
+    private static void HandleItemAppearance(HttpListenerContext ctx)
+    {
+        string id=(ctx.Request.QueryString["id"]??"").Trim();if(!ValidId(id)){Write(ctx,400,"application/json","{\"error\":\"Invalid item id\"}");return;}string displayId=null;lock(ItemAppearanceLock){ItemAppearanceCache.TryGetValue(id,out displayId);}if(string.IsNullOrWhiteSpace(displayId)){
+            try{using(var wc=WowClient("application/xml,text/xml,*/*")){string xml=wc.DownloadString("https://www.wowhead.com/tbc/item="+id+"&xml");displayId=ExtractDisplayId(xml);}}catch{}
+            if(string.IsNullOrWhiteSpace(displayId)){try{using(var wc=WowClient("text/html,*/*")){string html=wc.DownloadString("https://www.wowhead.com/tbc/item="+id);displayId=ExtractDisplayId(html);}}catch{}}
+            if(!string.IsNullOrWhiteSpace(displayId))lock(ItemAppearanceLock){ItemAppearanceCache[id]=displayId;}
+        }
+        if(string.IsNullOrWhiteSpace(displayId)){Write(ctx,404,"application/json","{\"error\":\"Item appearance not found\",\"id\":\""+JsonEscape(id)+"\"}");return;}Write(ctx,200,"application/json","{\"id\":\""+JsonEscape(id)+"\",\"displayId\":"+displayId+"}");
     }
 
     private static void ServeStatic(HttpListenerContext ctx,string requestPath){string relative=Uri.UnescapeDataString(requestPath.TrimStart('/').Replace('/',Path.DirectorySeparatorChar));if(string.IsNullOrWhiteSpace(relative))relative="index.html";string full=Path.GetFullPath(Path.Combine(Root,relative));if(!full.StartsWith(Path.GetFullPath(Root),StringComparison.OrdinalIgnoreCase)||!File.Exists(full)){Write(ctx,404,"text/plain","Not found");return;}byte[] bytes=File.ReadAllBytes(full);ctx.Response.StatusCode=200;ctx.Response.ContentType=Mime(full);ctx.Response.ContentLength64=bytes.Length;ctx.Response.OutputStream.Write(bytes,0,bytes.Length);ctx.Response.OutputStream.Close();}
