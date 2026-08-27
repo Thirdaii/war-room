@@ -1,0 +1,12 @@
+const fs=require('fs'),vm=require('vm');
+global.window={}; global.location={protocol:'http:',hostname:'127.0.0.1'}; global.AbortController=class{constructor(){this.signal={}} abort(){}};
+const src=fs.readFileSync('build/armory_refresh_adapter.js','utf8'); vm.runInThisContext(src);
+const payload={name:'Misanthropi',className:'Mage',race:'Undead',level:70,spec:'Arcane',itemLevel:128,lastLogin:'2026-08-26',flavor:'classicann',talents:[{name:'Arcane',icon:'spell_holy_magicalsentry',points:40},{name:'Fire',icon:'spell_fire_firebolt02',points:0},{name:'Frost',icon:'spell_frost_frostbolt02',points:21}],equipment:{head:{id:30206,name:'Cowl of Tirisfal',quality:'epic',itemLevel:133,slotLabel:'Head',enchants:[{text:'Enchanted: +22 Spell Power and +14 Spell Hit Rating',kind:'enchant'}]},neck:{id:28134,name:'Brooch of Heightened Potential',quality:'rare',itemLevel:112,slotLabel:'Neck',enchants:[]}}};
+const row=window.WarRoomArmoryRefresh.extractFromPayload(payload,'Misanthropi','https://classicarmory.gg/api/character/us/dreamscythe/Misanthropi?ns=classicann');
+if(!row) throw new Error('No row parsed');
+if(row.activeSpec!=='Arcane') throw new Error('Spec not parsed');
+if(row.ilvl!==128) throw new Error('Item level not parsed');
+if(!Array.isArray(row.talents)||row.talents.map(x=>x.points).join('/')!=='40/0/21') throw new Error('Talent tree not preserved');
+if(!Array.isArray(row.items)||row.items.length!==2) throw new Error('Equipment not normalized');
+if(row.items[0].name!=='Cowl of Tirisfal'||row.items[0].ilvl!==133) throw new Error('Head item lost');
+console.log('classicarmory.gg contract regression passed');
