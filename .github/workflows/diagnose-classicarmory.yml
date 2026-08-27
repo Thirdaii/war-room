@@ -1,4 +1,4 @@
-name: Diagnose ClassicArmory Data Shape
+name: Diagnose Armory Data Sources
 on:
   push:
     branches: [war-room-v1.7.9-classicarmory-parser-fix]
@@ -10,22 +10,40 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect ClassicArmory frontend and API routes
+      - name: Download production roster and probe armory sources
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          mkdir -p work/js
-          curl -LfsS -A 'Mozilla/5.0' https://classic-armory.org/ -o work/home.html
-          echo '=== SCRIPT SOURCES ==='
-          grep -oE '<script[^>]+src="[^"]+"' work/home.html | sed -E 's/.*src="([^"]+)"/\1/' | tee work/scripts.txt || true
-          while read -r s; do
-            [ -z "$s" ] && continue
-            case "$s" in
-              http*) u="$s" ;;
-              /*) u="https://classic-armory.org$s" ;;
-              *) u="https://classic-armory.org/$s" ;;
-            esac
-            f="work/js/$(basename "${s%%\?*}")"
-            curl -LfsS -A 'Mozilla/5.0' "$u" -o "$f" || true
-          done < work/scripts.txt
-          echo '=== API / CHARACTER ROUTE HINTS ==='
-          grep -RhoE '.{0,100}(api|character|equipment|gearscore|item_level|specialization|talent).{0,140}' work/js work/home.html | head -n 300 || true
+          mkdir -p work/app
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern 'WarRoom-App.zip' --dir work
+          unzip -q work/WarRoom-App.zip -d work/app
+          python - <<'PY'
+          from pathlib import Path
+          import re,json
+          h=Path('work/app/index.html').read_text(encoding='utf-8')
+          names=[]
+          m=re.search(r'(?:const|let|var)\s+roster\s*=\s*(\[[\s\S]*?\]);',h)
+          if m:
+              txt=m.group(1)
+              names=re.findall(r'name\s*:\s*["\']([^"\']+)',txt)[:8]
+          Path('work/names.txt').write_text('\n'.join(names),encoding='utf-8')
+          print('ROSTER SAMPLE:',names)
+          PY
+          echo '=== classic-armory.org status ==='
+          curl -L -sS -o /dev/null -w '%{http_code}\n' -A 'Mozilla/5.0' https://classic-armory.org/ || true
+          echo '=== classicarmory.gg homepage status ==='
+          curl -L -sS -o /dev/null -w '%{http_code}\n' -A 'Mozilla/5.0' https://classicarmory.gg/ || true
+          echo '=== roster character probes ==='
+          while read -r name; do
+            [ -z "$name" ] && continue
+            slug=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g;s/^-|-$//g')
+            url="https://classicarmory.gg/character/us/dreamscythe/$slug?ns=classicann"
+            code=$(curl -L -sS -o work/char.html -w '%{http_code}' -A 'Mozilla/5.0' "$url" || true)
+            echo "$name -> $code $url"
+            if [ "$code" = "200" ]; then
+              grep -oE '.{0,80}(GearScore|Item Level|ilvl|specialization|talent|equipment).{0,120}' work/char.html | head -n 25 || true
+              break
+            fi
+          done < work/names.txt
