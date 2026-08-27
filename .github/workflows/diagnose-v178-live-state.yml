@@ -1,0 +1,39 @@
+name: Diagnose War Room v1.7.8 Live State
+on:
+  push:
+    branches: [war-room-v1.7.8-live-intelligence-fix]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download live v1.7.7 package
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force work/base,work/app | Out-Null
+          gh release download v1.7.7 --repo $env:GITHUB_REPOSITORY --pattern "WarRoom-App.zip" --dir work/base
+          Expand-Archive -Path work/base/WarRoom-App.zip -DestinationPath work/app -Force
+      - name: Inspect live raid and roster model
+        shell: pwsh
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          h=Path('work/app/index.html').read_text(encoding='utf-8')
+          patterns=[
+            r'let\s+roster\s*=.{0,500}',r'const\s+roster\s*=.{0,500}',r'var\s+roster\s*=.{0,500}',
+            r'let\s+raid\s*=.{0,500}',r'const\s+raid\s*=.{0,500}',r'var\s+raid\s*=.{0,500}',
+            r'function\s+renderRaid\s*\([^)]*\)\s*\{.{0,5000}?\n\}',
+            r'function\s+renderRoster\s*\([^)]*\)\s*\{.{0,5000}?\n\}',
+            r'role\s*:\s*[^,}\n]+',r'spec\s*:\s*[^,}\n]+',r'class\s*:\s*[^,}\n]+'
+          ]
+          for p in patterns:
+            print('\n###',p)
+            ms=list(re.finditer(p,h,re.S|re.I))
+            for m in ms[:8]: print(m.group(0)[:5000])
+          PY
