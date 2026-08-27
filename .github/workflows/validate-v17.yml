@@ -1,7 +1,7 @@
-name: Validate War Room v1.7.3
+name: Validate War Room v1.7.4
 on:
   push:
-    branches: [war-room-v1.7.3-spec-freshness]
+    branches: [war-room-v1.7.4-armory-refresh-adapter]
   workflow_dispatch:
 permissions:
   contents: read
@@ -26,17 +26,19 @@ jobs:
         run: |
           python build/patch.py work/app
           python build/v17_integrate.py work/app
-      - name: Validate spec freshness and refresh bridge
+      - name: Validate armory adapter and intelligence
         shell: pwsh
         run: |
-          python -c "import re,pathlib,json; p=pathlib.Path('work/app'); h=(p/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert json.loads((p/'version.json').read_text(encoding='utf-8'))['version']=='1.7.3'; assert h.count('/* War Room v1.7 - TBC Phase 3 Raid Intelligence */')==1; assert h.count('/* War Room v1.7.3 - Spec Refresh Bridge */')==1; assert h.count('/* War Room v1.7 - live Raid Intelligence dashboard */')==1; assert 'SPEC DATA CONFIDENCE' in h and 'wrSpecMeta' in h and 'wrDataQuality' in h and 'WarRoomSpecRefresh' in h and 'wrRaidCommandDock' in h"
+          python -c "import re,pathlib,json; p=pathlib.Path('work/app'); h=(p/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert json.loads((p/'version.json').read_text(encoding='utf-8'))['version']=='1.7.4'; assert h.count('/* War Room v1.7 - TBC Phase 3 Raid Intelligence */')==1; assert h.count('/* War Room v1.7.3 - Spec Refresh Bridge */')==1; assert h.count('/* War Room v1.7.4 - ClassicArmory Refresh Adapter */')==1; assert 'WarRoomArmoryRefresh' in h and 'WarRoomSpecRefresh' in h and 'SPEC DATA CONFIDENCE' in h"
           node --check work/check.js
           node --check build/raid_intelligence.js
           node --check build/spec_refresh.js
+          node --check build/armory_refresh_adapter.js
           node --check build/raid_intelligence_ui.js
           node build/raid_intelligence_test.js
           node build/spec_freshness_test.js
           node build/spec_refresh_test.js
+          node build/armory_refresh_adapter_test.js
       - name: Validate updater parser
         shell: pwsh
         run: |
