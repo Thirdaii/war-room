@@ -1,0 +1,61 @@
+name: Diagnose War Room v1.7.8 Live State
+on:
+  push:
+    branches: [war-room-v1.7.8-live-intelligence-fix]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download live v1.7.7 package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p work/app
+          gh release download v1.7.7 --repo "$GITHUB_REPOSITORY" --pattern "WarRoom-App.zip" --dir work
+          unzip -q work/WarRoom-App.zip -d work/app
+          if [ ! -f work/app/index.html ]; then
+            d=$(find work/app -mindepth 1 -maxdepth 1 -type d | head -n1)
+            [ -n "$d" ] && cp -r "$d"/* work/app/
+          fi
+      - name: Inspect packaged app host and intelligence inputs
+        run: |
+          echo '=== PACKAGE ROOT ==='
+          find work/app -maxdepth 1 -type f -printf '%f\n' | sort
+          echo '=== LAUNCH APP WINDOW ==='
+          if [ -f work/app/LaunchAppWindow.ps1 ]; then sed -n '1,260p' work/app/LaunchAppWindow.ps1; else echo 'NOT FOUND'; fi
+          echo '=== INDEX INTELLIGENCE INPUTS ==='
+          cat > work/inspect.py <<'PY'
+          from pathlib import Path
+          import re
+          h=Path('work/app/index.html').read_text(encoding='utf-8')
+          def block(name):
+              m=re.search(r'function\s+'+re.escape(name)+r'\s*\([^)]*\)\s*\{',h)
+              if not m:return 'NOT FOUND'
+              start=m.start(); i=m.end()-1; depth=0; quote=None; esc=False
+              while i<len(h):
+                  c=h[i]
+                  if quote:
+                      if esc:esc=False
+                      elif c=='\\':esc=True
+                      elif c==quote:quote=None
+                  else:
+                      if c in "'\"`":quote=c
+                      elif c=='{':depth+=1
+                      elif c=='}':
+                          depth-=1
+                          if depth==0:return h[start:i+1]
+                  i+=1
+              return h[start:start+16000]
+          for name in ('renderRoster','renderRaid','specArtCardHTML','groupBuffs','roleOf','deriveRole','openPlayer'):
+              print('\n=== '+name+' ===')
+              print(block(name)[:16000])
+          print('\n=== ROSTER MUTATION LINES ===')
+          for line in h.splitlines():
+              if ('roster.' in line or 'roster[' in line) and any(k in line for k in ('spec','role','talent','build','Object.assign','forEach')):
+                  print(line[:4000])
+          PY
+          python work/inspect.py
