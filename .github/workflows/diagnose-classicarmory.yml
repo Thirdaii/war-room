@@ -10,30 +10,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Trace alternate armory API route
+      - name: Inspect structured armory JSON
         run: |
           set -e
-          curl -LfsS -A 'Mozilla/5.0' 'https://classicarmory.gg/character/us/dreamscythe/misanthropi?ns=classicann' -o work.html
-          js=$(grep -oE 'src="/assets/index-[^"]+\.js"' work.html | head -n1 | cut -d'"' -f2)
-          echo "BUNDLE: $js"
-          curl -LfsS -A 'Mozilla/5.0' "https://classicarmory.gg$js" -o work.js
+          curl -LfsS -A 'Mozilla/5.0' -H 'Accept: application/json' 'https://classicarmory.gg/api/character/us/dreamscythe/Misanthropi?ns=classicann' -o character.json
           python - <<'PY'
-          from pathlib import Path
-          import re
-          t=Path('work.js').read_text(encoding='utf-8',errors='ignore')
-          print('BUNDLE LENGTH:',len(t))
-          for pat in ('/api/','api.','fetch(','character','equipment','specialization','talent','itemLevel','gearscore','profile/wow'):
-              print('\n===',pat,'===')
-              start=0;shown=0
-              while shown<12:
-                  i=t.find(pat,start)
-                  if i<0: break
-                  print(t[max(0,i-240):i+520].replace('\n',' ')[:850])
-                  start=i+len(pat);shown+=1
-          print('\n=== URLS ===')
-          seen=[]
-          for u in re.findall(r'https?://[^"\'`\\ ]+',t):
-              if u not in seen and any(k in u.lower() for k in ('api','armory','battle','character')):
-                  seen.append(u); print(u[:500])
-                  if len(seen)>=60: break
+          import json
+          d=json.load(open('character.json',encoding='utf-8'))
+          print('TOP KEYS:', sorted(d.keys()))
+          for k in ('name','displayName','class','className','race','level','spec','specialization','itemLevel','gearScore','lastLogin','flavor'):
+              if k in d: print(k,':',d[k])
+          print('TALENTS:', json.dumps(d.get('talents'),ensure_ascii=False)[:2500])
+          eq=d.get('equipment') or {}
+          print('EQUIPMENT TYPE:', type(eq).__name__, 'COUNT:', len(eq) if hasattr(eq,'__len__') else '?')
+          if isinstance(eq,dict):
+              for slot,item in list(eq.items())[:4]: print('SLOT',slot, json.dumps(item,ensure_ascii=False)[:1800])
           PY
