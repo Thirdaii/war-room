@@ -1,0 +1,31 @@
+name: Diagnose ClassicArmory Data Shape
+on:
+  push:
+    branches: [war-room-v1.7.9-classicarmory-parser-fix]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect ClassicArmory frontend and API routes
+        run: |
+          set -e
+          mkdir -p work/js
+          curl -LfsS -A 'Mozilla/5.0' https://classic-armory.org/ -o work/home.html
+          echo '=== SCRIPT SOURCES ==='
+          grep -oE '<script[^>]+src="[^"]+"' work/home.html | sed -E 's/.*src="([^"]+)"/\1/' | tee work/scripts.txt || true
+          while read -r s; do
+            [ -z "$s" ] && continue
+            case "$s" in
+              http*) u="$s" ;;
+              /*) u="https://classic-armory.org$s" ;;
+              *) u="https://classic-armory.org/$s" ;;
+            esac
+            f="work/js/$(basename "${s%%\?*}")"
+            curl -LfsS -A 'Mozilla/5.0' "$u" -o "$f" || true
+          done < work/scripts.txt
+          echo '=== API / CHARACTER ROUTE HINTS ==='
+          grep -RhoE '.{0,100}(api|character|equipment|gearscore|item_level|specialization|talent).{0,140}' work/js work/home.html | head -n 300 || true
