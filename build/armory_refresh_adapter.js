@@ -1,4 +1,4 @@
-/* War Room v1.7.9 - Structured Armory Refresh */
+/* War Room v1.7.9 - ClassicArmory Structured API */
 (function(){
   const norm=s=>String(s||'').trim();
   const config={region:'us',realm:'dreamscythe',namespace:'classicann',source:'ClassicArmory.gg'};
