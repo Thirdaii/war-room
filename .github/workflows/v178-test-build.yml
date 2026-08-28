@@ -75,40 +75,61 @@ jobs:
           & $csc /nologo /target:winexe /optimize+ /reference:System.dll /reference:System.Windows.Forms.dll "/win32icon:$icon" "/out:$output" "$source"
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $output)) { throw "War Room.exe build failed." }
 
-      - name: Edge smoke test actual Classic 3D model creation
+      - name: Edge smoke test actual Classic 3D through local proxy
         shell: pwsh
         run: |
           $edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
           if (-not (Test-Path $edge)) { $edge = "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe" }
           if (-not (Test-Path $edge)) { throw 'Microsoft Edge not found on Windows runner' }
-          $page = @'
-          <!doctype html><html><head><meta charset="utf-8"></head><body data-smoke="WAIT"><div id="result">WAIT</div><div id="model" style="width:420px;height:420px"></div>
+
+          $server = @'
+          import http.server, urllib.request, urllib.error
+          PORT=43977
+          PAGE=r'''<!doctype html><html><head><meta charset="utf-8"></head><body data-smoke="WAIT"><div id="result">WAIT</div><div id="model" style="width:420px;height:420px"></div>
           <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-          <script>window.CONTENT_PATH='https://wow.zamimg.com/modelviewer/classic/';window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;</script>
-          <script src="https://wow.zamimg.com/modelviewer/live/viewer/viewer.min.js"></script>
+          <script>window.CONTENT_PATH=location.origin+'/modelviewer/classic/';window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;</script>
+          <script src="/modelviewer/live/viewer/viewer.min.js"></script>
           <script type="module">
           const out=document.getElementById('result');
           try {
             const jq=typeof window.jQuery; let zam='undefined'; try{zam=typeof ZamModelViewer}catch(e){zam='ERR'};
             const mod=await import('https://cdn.jsdelivr.net/npm/wow-model-viewer@1.5.3/index.js');
             const viewer=await mod.generateModels(1,'#model',{race:5,gender:1,noCharCustomization:true,items:[]},'classic');
-            await new Promise(r=>setTimeout(r,2500));
+            await new Promise(r=>setTimeout(r,3000));
             const canvas=document.querySelector('#model canvas');
             const ok=jq==='function'&&zam==='function'&&typeof mod.generateModels==='function'&&!!viewer&&!!canvas;
             out.textContent='JQ='+jq+';ZAM='+zam+';GENERATE='+typeof mod.generateModels+';VIEWER='+typeof viewer+';CANVAS='+!!canvas;
             document.body.setAttribute('data-smoke',ok?'PASS':'FAIL');
-          } catch(e) {
-            out.textContent='ERROR='+String(e&&e.stack||e&&e.message||e);
-            document.body.setAttribute('data-smoke','FAIL');
-          }
-          </script></body></html>
+          } catch(e) {out.textContent='ERROR='+String(e&&e.stack||e&&e.message||e);document.body.setAttribute('data-smoke','FAIL');}
+          </script></body></html>'''
+          class H(http.server.BaseHTTPRequestHandler):
+              def do_GET(self):
+                  if self.path=='/' or self.path.startswith('/?'):
+                      b=PAGE.encode(); self.send_response(200); self.send_header('Content-Type','text/html; charset=utf-8'); self.send_header('Content-Length',str(len(b))); self.end_headers(); self.wfile.write(b); return
+                  if self.path.startswith('/modelviewer/'):
+                      u='https://wow.zamimg.com'+self.path
+                      try:
+                          req=urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0','Referer':'https://www.wowhead.com/','Accept':'*/*'})
+                          with urllib.request.urlopen(req,timeout=20) as r:
+                              b=r.read(); self.send_response(r.status); self.send_header('Content-Type',r.headers.get('Content-Type','application/octet-stream')); self.send_header('Content-Length',str(len(b))); self.send_header('Access-Control-Allow-Origin','*'); self.end_headers(); self.wfile.write(b)
+                      except Exception as e:
+                          b=str(e).encode(); self.send_response(502); self.send_header('Content-Length',str(len(b))); self.end_headers(); self.wfile.write(b)
+                      return
+                  self.send_response(404); self.end_headers()
+              def log_message(self,fmt,*args): print(fmt%args,flush=True)
+          http.server.ThreadingHTTPServer(('127.0.0.1',PORT),H).serve_forever()
           '@
-          Set-Content -Path work/viewer-smoke.html -Value $page -Encoding UTF8
-          $uri = 'file:///' + ((Resolve-Path work/viewer-smoke.html).Path -replace '\\','/')
-          $dom = & $edge --headless=new --enable-webgl --use-angle=swiftshader --ignore-gpu-blocklist --allow-file-access-from-files --virtual-time-budget=25000 --dump-dom $uri 2>&1 | Out-String
-          $dom | Set-Content work/viewer-smoke-dom.txt
-          $dom | Tee-Object -FilePath work/integration.log -Append | Out-Host
-          if ($dom -notmatch 'data-smoke="PASS"') { throw 'Real Edge smoke test: actual Classic 3D model creation failed' }
+          Set-Content work/viewer_proxy_smoke.py $server -Encoding UTF8
+          $proc = Start-Process python -ArgumentList 'work/viewer_proxy_smoke.py' -PassThru -RedirectStandardOutput work/proxy-smoke.log -RedirectStandardError work/proxy-smoke.err
+          try {
+            Start-Sleep -Seconds 2
+            $dom = & $edge --headless=new --enable-webgl --use-angle=swiftshader --ignore-gpu-blocklist --virtual-time-budget=30000 --dump-dom http://127.0.0.1:43977/ 2>&1 | Out-String
+            $dom | Set-Content work/viewer-smoke-dom.txt
+            $dom | Tee-Object -FilePath work/integration.log -Append | Out-Host
+            Get-Content work/proxy-smoke.log -ErrorAction SilentlyContinue | Tee-Object -FilePath work/integration.log -Append | Out-Host
+            Get-Content work/proxy-smoke.err -ErrorAction SilentlyContinue | Tee-Object -FilePath work/integration.log -Append | Out-Host
+            if ($dom -notmatch 'data-smoke="PASS"') { throw 'Real Edge smoke test: actual Classic 3D model creation through same-origin proxy failed' }
+          } finally { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
 
       - name: Validate package contents
         shell: pwsh
@@ -140,6 +161,8 @@ jobs:
           path: |
             work/integration.log
             work/viewer-smoke-dom.txt
+            work/proxy-smoke.log
+            work/proxy-smoke.err
             work/app/index.html
           if-no-files-found: warn
           retention-days: 2
