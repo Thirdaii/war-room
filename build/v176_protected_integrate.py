@@ -15,13 +15,16 @@ parts = sorted(parts_dir.glob("part*.txt"))
 if len(parts) != 7:
     raise RuntimeError(f"Expected 7 protected v1.7.26 source parts, found {len(parts)}")
 
-block_bytes = b"".join(p.read_bytes() for p in parts)
+# GitHub Actions checks out text files on Windows with CRLF by default.
+# Read in text mode so Python normalizes line endings back to canonical LF
+# before verifying the exact recovered v1.7.26 payload.
+block = "".join(p.read_text(encoding="utf-8") for p in parts)
+block_bytes = block.encode("utf-8")
 if len(block_bytes) != EXPECTED_BYTES:
     raise RuntimeError(f"Protected v1.7.26 block byte count mismatch: {len(block_bytes)} != {EXPECTED_BYTES}")
 actual_sha = hashlib.sha256(block_bytes).hexdigest()
 if actual_sha != EXPECTED_SHA256:
     raise RuntimeError(f"Protected v1.7.26 block SHA-256 mismatch: {actual_sha}")
-block = block_bytes.decode("utf-8")
 
 required_source = [
     V176_MARKER,
