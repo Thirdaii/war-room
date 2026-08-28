@@ -5,6 +5,9 @@
   const state={characters:{},lastRun:null};
   function characterUrl(name,opts={}){const c={...config,...opts};return `https://classicarmory.gg/character/${encodeURIComponent(c.region)}/${encodeURIComponent(c.realm)}/${encodeURIComponent(norm(name))}?ns=${encodeURIComponent(c.namespace)}`;}
   function num(v){const n=Number(v);return Number.isFinite(n)?n:null}
+  function scalar(v){if(v==null)return'';if(typeof v==='object')return v.type??v.name??v.slug??v.value??v.id??'';return v}
+  function normalizedGender(c){for(const v of [c?.gender,c?.sex,c?.appearance?.gender,c?.appearance?.sex]){const s=norm(scalar(v)).toLowerCase();if(s==='male'||s==='m'||s==='1')return'male';if(s==='female'||s==='f'||s==='0')return'female'}return''}
+  function normalizedRace(c){return norm(scalar(c?.race))}
   function enhancementId(e){return e?.id??e?.enchantId??e?.enchant_id??e?.spellId??e?.spell_id??e?.itemId??e?.item_id??null}
   function enhancementText(e){return norm(e?.text||e?.name||e?.description||e?.effect||e?.tooltip||'')}
   function enhancementIcon(e){return norm(e?.icon||e?.iconName||e?.icon_name||'')}
@@ -19,7 +22,7 @@
     if(ilvl==null&&items.length){const vals=items.map(x=>x.ilvl).filter(x=>x!=null);if(vals.length)ilvl=Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*10)/10;}
     const updated=c.updated_at||c.updatedAt||c.lastLoginTs||c.lastLogin||payload.updated_at||payload.updatedAt||new Date().toISOString();
     if(!active&&!talents&&!items.length&&gearscore==null&&ilvl==null)return null;
-    return{name:c.name||name,activeSpec:active,secondarySpec:secondary,updatedAt:updated,source:config.source,sourceUrl:url,talents,gearscore,ilvl,items,className:c.className||c.class||'',race:c.race||'',level:num(c.level)};
+    return{name:c.name||name,activeSpec:active,secondarySpec:secondary,updatedAt:updated,source:config.source,sourceUrl:url,talents,gearscore,ilvl,items,className:c.className||c.class||'',race:normalizedRace(c),gender:normalizedGender(c),appearance:c.appearance||null,level:num(c.level)};
   }
   function retryable(err){const m=String(err?.message||err||'');return /AbortError|timed? out|network|fetch|HTTP 5\d\d|HTTP 429|secure channel|TLS/i.test(m)}
   async function fetchCharacter(name,opts={}){const sourceUrl=characterUrl(name,opts),timeoutMs=opts.timeoutMs||6000,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);const loc=(typeof location!=='undefined'&&location)?location:null;const local=(loc&&loc.protocol==='http:'&&(/^(127\.0\.0\.1|localhost)$/i).test(loc.hostname));const endpoint=local?`/armory?name=${encodeURIComponent(name)}`:`https://classicarmory.gg/api/character/${encodeURIComponent(config.region)}/${encodeURIComponent(config.realm)}/${encodeURIComponent(norm(name))}?ns=${encodeURIComponent(config.namespace)}`;try{const res=await fetch(endpoint,{headers:{'Accept':'application/json'},signal:controller.signal,cache:'no-store'});let payload=null;try{payload=await res.json()}catch(e){if(!res.ok)throw new Error(`HTTP ${res.status} • non-JSON proxy response`);throw new Error('Armory returned malformed JSON');}if(!res.ok){const detail=[payload?.error,payload?.stage,payload?.detail].filter(Boolean).join(' • ');throw new Error(`HTTP ${res.status}${detail?' • '+detail:''}`);}const row=extractFromPayload(payload,name,sourceUrl);if(!row)throw new Error('Armory response contained no spec, talents, iLvl, GearScore, or equipment');return row;}finally{clearTimeout(timer)}}
