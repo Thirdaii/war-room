@@ -1,0 +1,75 @@
+name: War Room v1.7.28 Test Build
+
+on:
+  push:
+    branches: [v1.7.28-model-proxy]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-artifact:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download production base without publishing
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force work/base,work/app | Out-Null
+          gh release download v1.7.25 --repo $env:GITHUB_REPOSITORY --pattern "WarRoom-App.zip" --dir work/base
+          Expand-Archive -Path work/base/WarRoom-App.zip -DestinationPath work/app -Force
+          if (-not (Test-Path work/app/index.html)) {
+            $dirs = @(Get-ChildItem work/app -Directory)
+            if ($dirs.Count -eq 1) {
+              Copy-Item "$($dirs[0].FullName)\*" work/app -Recurse -Force
+              Remove-Item $dirs[0].FullName -Recurse -Force
+            }
+          }
+          if (-not (Test-Path work/app/index.html)) { throw "Base package did not contain index.html." }
+
+      - name: Apply v1.7.28 integrations
+        shell: pwsh
+        run: |
+          python build/patch.py work/app
+          python build/v17_integrate.py work/app
+          python build/v178_integrate.py work/app
+          python -c "import json,pathlib; r=pathlib.Path('work/app'); v=pathlib.Path('build/version.txt').read_text().strip(); assert json.loads((r/'version.json').read_text())['version']==v; h=(r/'index.html').read_text(); assert \"VIEWER_SRC='/modelviewer/classic/viewer/viewer.min.js'\" in h; assert \"CONTENT=location.origin+'/modelviewer/classic/'\" in h; assert '/item-appearance?id=' in h"
+
+      - name: Patch and compile native launcher
+        shell: pwsh
+        run: |
+          python build/v178_launcher_patch.py
+          $launcher = Get-Content build/WarRoomLauncher.cs -Raw
+          foreach ($required in @('/item-appearance','/modelviewer/classic/','HandleItemAppearance','HandleModelViewerProxy','modelViewerProxy','itemAppearances')) {
+            if (-not $launcher.Contains($required)) { throw "Patched launcher missing $required" }
+          }
+          $icon = (Resolve-Path "work/app/assets/icons/WarRoom.ico").Path
+          $source = (Resolve-Path "build/WarRoomLauncher.cs").Path
+          $output = (Join-Path (Resolve-Path "work/app").Path "War Room.exe")
+          $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $csc /nologo /target:winexe /optimize+ /reference:System.dll /reference:System.Windows.Forms.dll "/win32icon:$icon" "/out:$output" "$source"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $output)) { throw "War Room.exe build failed." }
+
+      - name: Validate package contents
+        shell: pwsh
+        run: |
+          $h = Get-Content work/app/index.html -Raw
+          $healthMarkers = Get-Content build/WarRoomLauncher.cs -Raw
+          if (-not $h.Contains('wr-character-model-stage')) { throw 'Protected 3D stage missing' }
+          if (-not $h.Contains('Atomic per-character Inspect snapshots')) { throw 'Protected atomic Inspect snapshots missing' }
+          if (-not $healthMarkers.Contains('modelViewerProxy')) { throw 'Native model proxy marker missing' }
+          if (-not $healthMarkers.Contains('itemAppearances')) { throw 'Native appearance marker missing' }
+          Remove-Item work/app/WarRoomUpdater.log,work/app/WarRoomLauncher.log -ErrorAction SilentlyContinue
+          Compress-Archive -Path work/app/* -DestinationPath work/WarRoom-v1.7.28-TEST.zip -Force
+
+      - name: Upload test artifact only
+        uses: actions/upload-artifact@v4
+        with:
+          name: WarRoom-v1.7.28-TEST
+          path: work/WarRoom-v1.7.28-TEST.zip
+          if-no-files-found: error
+          retention-days: 7
