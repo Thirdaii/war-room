@@ -36,8 +36,26 @@ jobs:
         run: |
           python build/patch.py work/app
           python build/v17_integrate.py work/app
+          python build/v176_protected_integrate.py work/app
           python build/v178_integrate.py work/app
-          python -c "import json,pathlib; r=pathlib.Path('work/app'); v=pathlib.Path('build/version.txt').read_text().strip(); assert json.loads((r/'version.json').read_text())['version']==v; h=(r/'index.html').read_text(); assert \"VIEWER_SRC='/modelviewer/classic/viewer/viewer.min.js'\" in h; assert \"CONTENT=location.origin+'/modelviewer/classic/'\" in h; assert '/item-appearance?id=' in h"
+
+          $version = (Get-Content build/version.txt -Raw).Trim()
+          $manifest = Get-Content work/app/version.json -Raw | ConvertFrom-Json
+          if ($manifest.version -ne $version) { throw "version.json mismatch: $($manifest.version) != $version" }
+          $html = Get-Content work/app/index.html -Raw
+          foreach ($required in @(
+            "VIEWER_SRC='/modelviewer/classic/viewer/viewer.min.js'",
+            "CONTENT=location.origin+'/modelviewer/classic/'",
+            '/item-appearance?id=',
+            'War Room v1.7.26 - Atomic per-character Inspect snapshots',
+            'WarRoomInspectSnapshots',
+            'WarRoomCharacterModelManifest',
+            'wr-character-model-stage',
+            'window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined',
+            'generateModels(aspect'
+          )) {
+            if (-not $html.Contains($required)) { throw "Integrated index missing $required" }
+          }
 
       - name: Patch and compile native launcher
         shell: pwsh
