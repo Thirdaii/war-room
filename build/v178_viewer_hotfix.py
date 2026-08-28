@@ -12,15 +12,13 @@ if old in h:
 elif new not in h:
     raise RuntimeError('Local viewer constants not found for live-runtime hotfix')
 
-# The Windows/Edge QA that creates a real Classic canvas loads viewer.min.js as
-# a normal parser script.  War Room was still dynamically injecting it later,
-# which is the material difference left between QA and the real app.  Mirror
-# the passing path exactly: establish CONTENT_PATH, load the same-origin viewer
-# runtime statically, then let the existing wrapper import consume its global
-# lexical ZamModelViewer binding.  Do not require window.ZamModelViewer: the
-# upstream runtime does not promise that property.
+# Mirror the passing Windows/Edge QA bootstrap order exactly.  The Wowhead
+# viewer runtime expects jQuery to exist when its parser-loaded script runs, so
+# load jQuery first, then configure Classic CONTENT_PATH, then load the same-
+# origin viewer runtime.  The wrapper import can then consume the lexical
+# ZamModelViewer binding without relying on window.ZamModelViewer.
 STATIC_MARKER='War Room v1.7.28 - Static viewer runtime bootstrap'
-static_boot="""<script>/* War Room v1.7.28 - Static viewer runtime bootstrap */window.CONTENT_PATH=location.origin+'/modelviewer/classic/';window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;</script><script src=\"/modelviewer/live/viewer/viewer.min.js\"></script>"""
+static_boot="""<script src=\"https://code.jquery.com/jquery-3.7.1.min.js\"></script><script>/* War Room v1.7.28 - Static viewer runtime bootstrap */window.CONTENT_PATH=location.origin+'/modelviewer/classic/';window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;</script><script src=\"/modelviewer/live/viewer/viewer.min.js\"></script>"""
 if STATIC_MARKER not in h:
     if '</head>' not in h: raise RuntimeError('No head end found for static viewer bootstrap')
     h=h.replace('</head>',static_boot+'</head>',1)
@@ -50,8 +48,10 @@ if "CONTENT=location.origin+'/modelviewer/classic/'" not in h:
     raise RuntimeError('Classic content path missing')
 if STATIC_MARKER not in h or static_loader not in h:
     raise RuntimeError('Static viewer runtime bootstrap missing')
+if '<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>' not in h:
+    raise RuntimeError('Static jQuery bootstrap missing before viewer runtime')
 for required in [marker,'#drawer .dossier-runes{display:none!important}','#drawer .ds:has(#dsGS){display:none!important}','#drawer .detail-box:has(#dGs){display:none!important}']:
     if required not in h: raise RuntimeError('Inspect cleanup marker missing: '+required)
 
 index.write_text(h,encoding='utf-8')
-print('War Room v1.7.28 hotfix: static same-origin viewer runtime + Classic content + GearScore UI removed')
+print('War Room v1.7.28 hotfix: static jQuery + same-origin viewer runtime + Classic content + GearScore UI removed')
