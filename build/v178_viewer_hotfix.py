@@ -36,6 +36,17 @@ elif protected_loader in h:
 elif static_loader not in h:
     raise RuntimeError('No supported ZamModelViewer loader guard found for static-runtime hotfix')
 
+# War Room itself uses `$` as a document.querySelector shorthand.  The Wowhead
+# runtime also expects `$` to be jQuery while it creates DOM nodes such as
+# $('<canvas/>').  Temporarily restore jQuery only around generateModels so the
+# viewer can construct its canvas without breaking War Room's own `$` helper.
+old_generate="return await generateModels(aspect,'#'+host.id,characterPayload(manifest),'classic')"
+new_generate="const wrDollar=window.$;if(window.jQuery)window.$=window.jQuery;try{return await generateModels(aspect,'#'+host.id,characterPayload(manifest),'classic')}finally{window.$=wrDollar}"
+if old_generate in h:
+    h=h.replace(old_generate,new_generate,1)
+elif new_generate not in h:
+    raise RuntimeError('3D generateModels call not found for jQuery collision fix')
+
 marker='/* War Room v1.7.28 - Remove dossier rune row */'
 css='''\n/* War Room v1.7.28 - Remove dossier rune row */\n#drawer .dossier-runes{display:none!important}\n#drawer #dsGS{display:none!important}\n#drawer #dsGS + span{display:none!important}\n#drawer .ds:has(#dsGS){display:none!important}\n#drawer .detail-box:has(#dGs){display:none!important}\n'''
 if marker not in h:
@@ -50,8 +61,10 @@ if STATIC_MARKER not in h or static_loader not in h:
     raise RuntimeError('Static viewer runtime bootstrap missing')
 if '<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>' not in h:
     raise RuntimeError('Static jQuery bootstrap missing before viewer runtime')
+if new_generate not in h:
+    raise RuntimeError('jQuery collision guard missing around generateModels')
 for required in [marker,'#drawer .dossier-runes{display:none!important}','#drawer .ds:has(#dsGS){display:none!important}','#drawer .detail-box:has(#dGs){display:none!important}']:
     if required not in h: raise RuntimeError('Inspect cleanup marker missing: '+required)
 
 index.write_text(h,encoding='utf-8')
-print('War Room v1.7.28 hotfix: static jQuery + same-origin viewer runtime + Classic content + GearScore UI removed')
+print('War Room v1.7.28 hotfix: static jQuery + viewer runtime + scoped $ collision guard + GearScore UI removed')
