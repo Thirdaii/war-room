@@ -6,6 +6,7 @@ on:
       - build/version.txt
       - build/patch.py
       - build/WarRoomLauncher.cs
+      - build/v178_launcher_patch.py
       - build/v17_integrate.py
       - build/raid_intelligence.js
       - build/raid_intelligence_ui.js
@@ -71,6 +72,11 @@ jobs:
       - name: Build native War Room launcher
         shell: pwsh
         run: |
+          python build/v178_launcher_patch.py
+          $launcher = Get-Content build/WarRoomLauncher.cs -Raw
+          foreach ($required in @('/item-appearance','/modelviewer/classic/','HandleItemAppearance','HandleModelViewerProxy','modelViewerProxy','itemAppearances')) {
+            if (-not $launcher.Contains($required)) { throw "Patched launcher missing $required" }
+          }
           $icon = (Resolve-Path "work/app/assets/icons/WarRoom.ico").Path
           $source = (Resolve-Path "build/WarRoomLauncher.cs").Path
           $output = (Join-Path (Resolve-Path "work/app").Path "War Room.exe")
