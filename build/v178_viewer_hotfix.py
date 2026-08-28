@@ -12,21 +12,23 @@ if old in h:
 elif new not in h:
     raise RuntimeError('Local viewer constants not found for live-runtime hotfix')
 
-# Current Wowhead viewer runtime may expose ZamModelViewer as a global lexical
-# binding instead of a window property.  The wrapper itself extends the bare
-# ZamModelViewer identifier, so requiring window.ZamModelViewer incorrectly
-# rejects a runtime that is actually usable.
-old_loader="await script(VIEWER_SRC,'ZamModelViewer');if(typeof window.ZamModelViewer!=='function')throw new Error('live viewer loaded without ZamModelViewer');"
-new_loader="await script(VIEWER_SRC);if(typeof ZamModelViewer!=='function'){const keys=Object.keys(window).filter(k=>/zam|model/i.test(k)).slice(0,12).join(',');throw new Error('viewer runtime loaded but ZamModelViewer binding missing'+(keys?' globals='+keys:''));}"
+# The Wowhead runtime can create ZamModelViewer as a global lexical binding.
+# War Room's 3D loader function is compiled before that dependency is inserted,
+# so a direct identifier/window check can still miss it on some Edge builds.
+# Compile an indirect global eval *after* the script loads and bridge the
+# discovered constructor onto window.  The wrapper can then use the same
+# constructor and our diagnostics have a stable property to inspect.
+old_loader="await script(VIEWER_SRC);if(typeof ZamModelViewer!=='function'){const keys=Object.keys(window).filter(k=>/zam|model/i.test(k)).slice(0,12).join(',');throw new Error('viewer runtime loaded but ZamModelViewer binding missing'+(keys?' globals='+keys:''));}"
+new_loader="await script(VIEWER_SRC);let zamCtor=window.ZamModelViewer;try{if(typeof zamCtor!=='function')zamCtor=(0,eval)('typeof ZamModelViewer===\\\"function\\\"?ZamModelViewer:null')}catch(e){}if(typeof zamCtor==='function')window.ZamModelViewer=zamCtor;if(typeof window.ZamModelViewer!=='function'){const keys=Object.keys(window).filter(k=>/zam|model/i.test(k)).slice(0,12).join(',');throw new Error('viewer runtime loaded but ZamModelViewer binding missing'+(keys?' globals='+keys:''));}"
 if old_loader in h:
     h=h.replace(old_loader,new_loader,1)
 elif new_loader not in h:
-    raise RuntimeError('ZamModelViewer loader guard not found for lexical-binding hotfix')
+    raise RuntimeError('ZamModelViewer loader guard not found for bridge hotfix')
 
-marker='/* War Room v1.7.28 - Remove dossier rune row */'
-css='''\n/* War Room v1.7.28 - Remove dossier rune row */\n#drawer .dossier-runes{display:none!important}\n'''
+marker='/* War Room v1.7.28 - Inspect cleanup */'
+css='''\n/* War Room v1.7.28 - Inspect cleanup */\n#drawer .dossier-runes{display:none!important}\n#drawer #dsGS{display:none!important}\n#drawer #dsGS + span{display:none!important}\n#drawer .ds:has(#dsGS){display:none!important}\n#drawer .detail-box:has(#dGs){display:none!important}\n'''
 if marker not in h:
-    if '</style>' not in h: raise RuntimeError('No style block found for dossier rune removal')
+    if '</style>' not in h: raise RuntimeError('No style block found for Inspect cleanup')
     h=h.replace('</style>',css+'</style>',1)
 
 if h.count("VIEWER_SRC='/modelviewer/live/viewer/viewer.min.js'")!=1:
@@ -34,9 +36,9 @@ if h.count("VIEWER_SRC='/modelviewer/live/viewer/viewer.min.js'")!=1:
 if "CONTENT=location.origin+'/modelviewer/classic/'" not in h:
     raise RuntimeError('Classic content path missing')
 if new_loader not in h:
-    raise RuntimeError('Lexical ZamModelViewer runtime guard missing')
-if marker not in h:
-    raise RuntimeError('Dossier rune removal marker missing')
+    raise RuntimeError('ZamModelViewer global bridge missing')
+for required in [marker,'#drawer .dossier-runes{display:none!important}','#drawer .ds:has(#dsGS){display:none!important}','#drawer .detail-box:has(#dGs){display:none!important}']:
+    if required not in h: raise RuntimeError('Inspect cleanup marker missing: '+required)
 
 index.write_text(h,encoding='utf-8')
-print('War Room v1.7.28 viewer hotfix: live Zam runtime + lexical global detection + Classic content + dossier rune row removed')
+print('War Room v1.7.28 hotfix: ZamModelViewer global bridge + Classic content + GearScore UI removed')
