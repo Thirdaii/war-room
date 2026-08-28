@@ -82,6 +82,33 @@ jobs:
           & $csc /nologo /target:winexe /optimize+ /reference:System.dll /reference:System.Windows.Forms.dll "/win32icon:$icon" "/out:$output" "$source"
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $output)) { throw "War Room.exe build failed." }
 
+      - name: Edge smoke test live ZamModelViewer runtime
+        shell: pwsh
+        run: |
+          $edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+          if (-not (Test-Path $edge)) { $edge = "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe" }
+          if (-not (Test-Path $edge)) { throw 'Microsoft Edge not found on Windows runner' }
+
+          $page = @'
+          <!doctype html><meta charset="utf-8"><body><div id="result">WAIT</div>
+          <script src="https://wow.zamimg.com/modelviewer/live/viewer/viewer.min.js"></script>
+          <script>
+          (function(){
+            let t='undefined';
+            try { t=typeof ZamModelViewer; } catch(e) { t='lexical-error:'+e.message; }
+            const w=typeof window.ZamModelViewer;
+            document.getElementById('result').textContent='LEXICAL='+t+';WINDOW='+w;
+            document.body.setAttribute('data-smoke',t==='function'?'PASS':'FAIL');
+          })();
+          </script>
+          '@
+          Set-Content -Path work/viewer-smoke.html -Value $page -Encoding UTF8
+          $uri = 'file:///' + ((Resolve-Path work/viewer-smoke.html).Path -replace '\\','/')
+          $dom = & $edge --headless=new --disable-gpu --allow-file-access-from-files --virtual-time-budget=8000 --dump-dom $uri 2>&1 | Out-String
+          $dom | Set-Content work/viewer-smoke-dom.txt
+          $dom | Tee-Object -FilePath work/integration.log -Append | Out-Host
+          if ($dom -notmatch 'data-smoke="PASS"') { throw 'Real Edge smoke test: ZamModelViewer did not become a usable function' }
+
       - name: Validate package contents
         shell: pwsh
         run: |
@@ -111,6 +138,7 @@ jobs:
           name: WarRoom-v1.7.28-DIAGNOSTICS
           path: |
             work/integration.log
+            work/viewer-smoke-dom.txt
             work/app/index.html
           if-no-files-found: warn
           retention-days: 2
