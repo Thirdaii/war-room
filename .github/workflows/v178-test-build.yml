@@ -34,10 +34,17 @@ jobs:
       - name: Apply v1.7.28 integrations
         shell: pwsh
         run: |
-          python build/patch.py work/app
-          python build/v17_integrate.py work/app
-          python build/v176_protected_integrate.py work/app
-          python build/v178_integrate.py work/app
+          $log = 'work/integration.log'
+          "War Room v1.7.28 integration diagnostics" | Set-Content $log
+
+          python build/patch.py work/app 2>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python build/v17_integrate.py work/app 2>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python build/v176_protected_integrate.py work/app 2>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python build/v178_integrate.py work/app 2>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           $version = (Get-Content build/version.txt -Raw).Trim()
           $manifest = Get-Content work/app/version.json -Raw | ConvertFrom-Json
@@ -91,3 +98,14 @@ jobs:
           path: work/WarRoom-v1.7.28-TEST.zip
           if-no-files-found: error
           retention-days: 7
+
+      - name: Upload integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WarRoom-v1.7.28-DIAGNOSTICS
+          path: |
+            work/integration.log
+            work/app/index.html
+          if-no-files-found: warn
+          retention-days: 2
