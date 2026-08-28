@@ -16,8 +16,7 @@ elif new not in h:
 # War Room's 3D loader function is compiled before that dependency is inserted,
 # so a direct identifier/window check can still miss it on some Edge builds.
 # Compile an indirect global eval *after* the script loads and bridge the
-# discovered constructor onto window.  The wrapper can then use the same
-# constructor and our diagnostics have a stable property to inspect.
+# discovered constructor onto window.
 old_loader="await script(VIEWER_SRC);if(typeof ZamModelViewer!=='function'){const keys=Object.keys(window).filter(k=>/zam|model/i.test(k)).slice(0,12).join(',');throw new Error('viewer runtime loaded but ZamModelViewer binding missing'+(keys?' globals='+keys:''));}"
 new_loader="await script(VIEWER_SRC);let zamCtor=window.ZamModelViewer;try{if(typeof zamCtor!=='function')zamCtor=(0,eval)('typeof ZamModelViewer===\\\"function\\\"?ZamModelViewer:null')}catch(e){}if(typeof zamCtor==='function')window.ZamModelViewer=zamCtor;if(typeof window.ZamModelViewer!=='function'){const keys=Object.keys(window).filter(k=>/zam|model/i.test(k)).slice(0,12).join(',');throw new Error('viewer runtime loaded but ZamModelViewer binding missing'+(keys?' globals='+keys:''));}"
 if old_loader in h:
@@ -25,8 +24,9 @@ if old_loader in h:
 elif new_loader not in h:
     raise RuntimeError('ZamModelViewer loader guard not found for bridge hotfix')
 
-marker='/* War Room v1.7.28 - Inspect cleanup */'
-css='''\n/* War Room v1.7.28 - Inspect cleanup */\n#drawer .dossier-runes{display:none!important}\n#drawer #dsGS{display:none!important}\n#drawer #dsGS + span{display:none!important}\n#drawer .ds:has(#dsGS){display:none!important}\n#drawer .detail-box:has(#dGs){display:none!important}\n'''
+# Keep the established QA marker while expanding the same cleanup pass.
+marker='/* War Room v1.7.28 - Remove dossier rune row */'
+css='''\n/* War Room v1.7.28 - Remove dossier rune row */\n#drawer .dossier-runes{display:none!important}\n#drawer #dsGS{display:none!important}\n#drawer #dsGS + span{display:none!important}\n#drawer .ds:has(#dsGS){display:none!important}\n#drawer .detail-box:has(#dGs){display:none!important}\n'''
 if marker not in h:
     if '</style>' not in h: raise RuntimeError('No style block found for Inspect cleanup')
     h=h.replace('</style>',css+'</style>',1)
