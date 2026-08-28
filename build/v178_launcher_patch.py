@@ -12,6 +12,13 @@ s=s.replace('if(path.Equals("/enchantment",StringComparison.OrdinalIgnoreCase)){
 s=re.sub(r'\{\\"ok\\":true,\\"version\\":\\"[^\"]+\\",\\"tls\\":\\"1\.2\\",\\"itemIcons\\":true,\\"gems\\":true,\\"enchantments\\":true\}', '{\\"ok\\":true,\\"version\\":\\"'+version+'\\",\\"tls\\":\\"1.2\\",\\"itemIcons\\":true,\\"gems\\":true,\\"enchantments\\":true,\\"itemAppearances\\":true,\\"modelViewerProxy\\":true}', s)
 s=re.sub(r'WarRoom/\d+\.\d+\.\d+', 'WarRoom/'+version, s)
 
+# Restore v1.7.26 clean shutdown semantics. The stale v1.7.25 source starts a
+# message loop but never exits it when the dedicated Edge app process closes.
+old_host='private sealed class HostContext:ApplicationContext{private readonly HttpListener listener;private readonly Process launched;public HostContext(HttpListener listener,Process launched){this.listener=listener;this.launched=launched;}protected override void ExitThreadCore(){try{if(listener!=null){listener.Stop();listener.Close();}}catch{}try{if(launched!=null)launched.Dispose();}catch{}base.ExitThreadCore();}}'
+new_host='private sealed class HostContext:ApplicationContext{private readonly HttpListener listener;private readonly Process launched;private readonly System.Windows.Forms.Timer exitTimer;public HostContext(HttpListener listener,Process launched){this.listener=listener;this.launched=launched;exitTimer=new System.Windows.Forms.Timer();exitTimer.Interval=400;exitTimer.Tick+=(s,e)=>{try{if(this.launched!=null&&this.launched.HasExited){exitTimer.Stop();ExitThread();}}catch{}};exitTimer.Start();}protected override void ExitThreadCore(){try{if(exitTimer!=null){exitTimer.Stop();exitTimer.Dispose();}}catch{}try{if(listener!=null){listener.Stop();listener.Close();}}catch{}try{if(launched!=null)launched.Dispose();}catch{}base.ExitThreadCore();}}'
+if old_host not in s: raise RuntimeError('HostContext anchor missing; clean-shutdown patch not applied')
+s=s.replace(old_host,new_host,1)
+
 anchor='    private static void ServeStatic(HttpListenerContext ctx,string requestPath)'
 if anchor not in s: raise RuntimeError('ServeStatic anchor missing')
 methods=r'''    private static string ExtractDisplayId(string xml)
@@ -57,8 +64,8 @@ methods=r'''    private static string ExtractDisplayId(string xml)
 '''
 s=s.replace(anchor,methods+anchor,1)
 
-required=['/item-appearance','/modelviewer/classic/','HandleItemAppearance','HandleModelViewerProxy','modelViewerProxy','itemAppearances']
+required=['/item-appearance','/modelviewer/classic/','HandleItemAppearance','HandleModelViewerProxy','modelViewerProxy','itemAppearances','exitTimer','HasExited']
 for marker in required:
     if marker not in s: raise RuntimeError('launcher patch missing '+marker)
 p.write_text(s,encoding='utf-8')
-print('War Room v'+version+' native launcher proxy patch complete')
+print('War Room v'+version+' native launcher proxy + clean-shutdown patch complete')
