@@ -5,10 +5,10 @@ p=Path('build/WarRoomLauncher.cs')
 s=p.read_text(encoding='utf-8')
 version=Path('build/version.txt').read_text(encoding='utf-8').strip()
 
-# Preserve v1.7.26 item-appearance capability and add the same-origin Classic model proxy.
+# Preserve v1.7.26 item-appearance capability and add the same-origin model proxy.
 s=s.replace('private static readonly Dictionary<string,string> EnchantmentCache = new Dictionary<string,string>();', 'private static readonly Dictionary<string,string> EnchantmentCache = new Dictionary<string,string>();\n    private static readonly Dictionary<string,string> ItemAppearanceCache = new Dictionary<string,string>();')
 s=s.replace('private static readonly object EnchantmentLock = new object();', 'private static readonly object EnchantmentLock = new object();\n    private static readonly object ItemAppearanceLock = new object();')
-s=s.replace('if(path.Equals("/enchantment",StringComparison.OrdinalIgnoreCase)){HandleEnchantment(ctx);return;}', 'if(path.Equals("/enchantment",StringComparison.OrdinalIgnoreCase)){HandleEnchantment(ctx);return;}\n            if(path.Equals("/item-appearance",StringComparison.OrdinalIgnoreCase)){HandleItemAppearance(ctx);return;}\n            if(path.StartsWith("/modelviewer/classic/",StringComparison.OrdinalIgnoreCase)){HandleModelViewerProxy(ctx);return;}')
+s=s.replace('if(path.Equals("/enchantment",StringComparison.OrdinalIgnoreCase)){HandleEnchantment(ctx);return;}', 'if(path.Equals("/enchantment",StringComparison.OrdinalIgnoreCase)){HandleEnchantment(ctx);return;}\n            if(path.Equals("/item-appearance",StringComparison.OrdinalIgnoreCase)){HandleItemAppearance(ctx);return;}\n            if(path.StartsWith("/modelviewer/",StringComparison.OrdinalIgnoreCase)){HandleModelViewerProxy(ctx);return;}')
 s=re.sub(r'\{\\"ok\\":true,\\"version\\":\\"[^\"]+\\",\\"tls\\":\\"1\.2\\",\\"itemIcons\\":true,\\"gems\\":true,\\"enchantments\\":true\}', '{\\"ok\\":true,\\"version\\":\\"'+version+'\\",\\"tls\\":\\"1.2\\",\\"itemIcons\\":true,\\"gems\\":true,\\"enchantments\\":true,\\"itemAppearances\\":true,\\"modelViewerProxy\\":true}', s)
 s=re.sub(r'WarRoom/\d+\.\d+\.\d+', 'WarRoom/'+version, s)
 
@@ -46,7 +46,7 @@ methods=r'''    private static string ExtractDisplayId(string xml)
     private static void HandleModelViewerProxy(HttpListenerContext ctx)
     {
         string localPath=ctx.Request.Url.AbsolutePath;
-        if(!localPath.StartsWith("/modelviewer/classic/",StringComparison.OrdinalIgnoreCase)){Write(ctx,404,"text/plain","Not found");return;}
+        if(!localPath.StartsWith("/modelviewer/",StringComparison.OrdinalIgnoreCase)){Write(ctx,404,"text/plain","Not found");return;}
         string upstream="https://wow.zamimg.com"+localPath+(string.IsNullOrEmpty(ctx.Request.Url.Query)?"":ctx.Request.Url.Query);
         try{
             var req=(HttpWebRequest)WebRequest.Create(upstream);req.Method="GET";req.Proxy=null;req.AllowAutoRedirect=true;req.UserAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) WarRoom/'''+version+r'''";req.Accept="*/*";req.Referer="https://www.wowhead.com/";req.AutomaticDecompression=DecompressionMethods.GZip|DecompressionMethods.Deflate;
@@ -64,8 +64,8 @@ methods=r'''    private static string ExtractDisplayId(string xml)
 '''
 s=s.replace(anchor,methods+anchor,1)
 
-required=['/item-appearance','/modelviewer/classic/','HandleItemAppearance','HandleModelViewerProxy','modelViewerProxy','itemAppearances','exitTimer','HasExited']
+required=['/item-appearance','/modelviewer/','HandleItemAppearance','HandleModelViewerProxy','modelViewerProxy','itemAppearances','exitTimer','HasExited']
 for marker in required:
     if marker not in s: raise RuntimeError('launcher patch missing '+marker)
 p.write_text(s,encoding='utf-8')
-print('War Room v'+version+' native launcher proxy + clean-shutdown patch complete')
+print('War Room v'+version+' native launcher live/classic model proxy + clean-shutdown patch complete')
