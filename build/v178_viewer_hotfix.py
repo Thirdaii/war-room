@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import sys
 
 root=Path(sys.argv[1])
@@ -12,11 +13,23 @@ if old in h:
 elif new not in h:
     raise RuntimeError('Local viewer constants not found for live-runtime hotfix')
 
-# Mirror the passing Windows/Edge QA bootstrap order exactly.  The Wowhead
-# viewer runtime expects jQuery to exist when its parser-loaded script runs, so
-# load jQuery first, then configure Classic CONTENT_PATH, then load the same-
-# origin viewer runtime.  The wrapper import can then consume the lexical
-# ZamModelViewer binding without relying on window.ZamModelViewer.
+# The production War Room page declares a top-level lexical `$` helper:
+#     const $=s=>document.querySelector(s);
+# External scripts execute in the same global lexical environment, so the Wowhead
+# viewer resolves `$` to that helper instead of window.jQuery.  That is why its
+# $('<canvas/>') call reaches document.querySelector and throws the exact error
+# seen in the real app.  Rename War Room's helper and every War Room `$(` call so
+# the viewer is free to resolve global `$` to jQuery for its entire lifetime.
+old_helper='const $=s=>document.querySelector(s);'
+new_helper='const wrQuery=s=>document.querySelector(s);'
+if old_helper in h:
+    h=h.replace(old_helper,new_helper,1)
+    h=re.sub(r'(?<![A-Za-z0-9_$])\$\(', 'wrQuery(', h)
+elif new_helper not in h:
+    raise RuntimeError('War Room querySelector helper not found for lexical $ isolation')
+
+# Mirror the passing Windows/Edge QA bootstrap order exactly.  jQuery must exist
+# before the parser-loaded viewer runtime.  Classic assets remain same-origin.
 STATIC_MARKER='War Room v1.7.28 - Static viewer runtime bootstrap'
 static_boot="""<script src=\"https://code.jquery.com/jquery-3.7.1.min.js\"></script><script>/* War Room v1.7.28 - Static viewer runtime bootstrap */window.CONTENT_PATH=location.origin+'/modelviewer/classic/';window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;</script><script src=\"/modelviewer/live/viewer/viewer.min.js\"></script>"""
 if STATIC_MARKER not in h:
@@ -36,16 +49,15 @@ elif protected_loader in h:
 elif static_loader not in h:
     raise RuntimeError('No supported ZamModelViewer loader guard found for static-runtime hotfix')
 
-# War Room itself uses `$` as a document.querySelector shorthand.  The Wowhead
-# runtime also expects `$` to be jQuery while it creates DOM nodes such as
-# $('<canvas/>').  Temporarily restore jQuery only around generateModels so the
-# viewer can construct its canvas without breaking War Room's own `$` helper.
+# Remove the obsolete scoped window.$ swap from the previous test build.  It
+# could never shadow a top-level lexical `$`; the helper rename above fixes the
+# collision at the correct JavaScript binding boundary.
 old_generate="return await generateModels(aspect,'#'+host.id,characterPayload(manifest),'classic')"
-new_generate="const wrDollar=window.$;if(window.jQuery)window.$=window.jQuery;try{return await generateModels(aspect,'#'+host.id,characterPayload(manifest),'classic')}finally{window.$=wrDollar}"
-if old_generate in h:
-    h=h.replace(old_generate,new_generate,1)
-elif new_generate not in h:
-    raise RuntimeError('3D generateModels call not found for jQuery collision fix')
+scoped_generate="const wrDollar=window.$;if(window.jQuery)window.$=window.jQuery;try{return await generateModels(aspect,'#'+host.id,characterPayload(manifest),'classic')}finally{window.$=wrDollar}"
+if scoped_generate in h:
+    h=h.replace(scoped_generate,old_generate,1)
+elif old_generate not in h:
+    raise RuntimeError('3D generateModels call not found after lexical $ isolation')
 
 marker='/* War Room v1.7.28 - Remove dossier rune row */'
 css='''\n/* War Room v1.7.28 - Remove dossier rune row */\n#drawer .dossier-runes{display:none!important}\n#drawer #dsGS{display:none!important}\n#drawer #dsGS + span{display:none!important}\n#drawer .ds:has(#dsGS){display:none!important}\n#drawer .detail-box:has(#dGs){display:none!important}\n'''
@@ -61,10 +73,12 @@ if STATIC_MARKER not in h or static_loader not in h:
     raise RuntimeError('Static viewer runtime bootstrap missing')
 if '<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>' not in h:
     raise RuntimeError('Static jQuery bootstrap missing before viewer runtime')
-if new_generate not in h:
-    raise RuntimeError('jQuery collision guard missing around generateModels')
+if old_helper in h or re.search(r'(?<![A-Za-z0-9_$])\$\(', h):
+    raise RuntimeError('Lexical War Room $ collision or unrenamed War Room $ call remains')
+if new_helper not in h or 'wrQuery("#toast")' not in h:
+    raise RuntimeError('War Room query helper rename did not propagate to app calls')
 for required in [marker,'#drawer .dossier-runes{display:none!important}','#drawer .ds:has(#dsGS){display:none!important}','#drawer .detail-box:has(#dGs){display:none!important}']:
     if required not in h: raise RuntimeError('Inspect cleanup marker missing: '+required)
 
 index.write_text(h,encoding='utf-8')
-print('War Room v1.7.28 hotfix: static jQuery + viewer runtime + scoped $ collision guard + GearScore UI removed')
+print('War Room v1.7.28 hotfix: lexical $ isolated + static jQuery/viewer runtime + GearScore UI removed')
