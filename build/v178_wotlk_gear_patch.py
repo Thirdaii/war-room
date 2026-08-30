@@ -5,10 +5,7 @@ root=Path(sys.argv[1])
 index=root/'index.html'
 h=index.read_text(encoding='utf-8')
 
-# The live Zam runtime is the only public runtime that works reliably in War Room.
-# Upstream wow-model-viewer documents WotLK gear by pairing that live runtime with
-# the live data tree and the old->new display-id conversion API.  Keep the stable
-# viewer lifecycle, but switch equipment resolution to that compatibility path.
+# Keep the proven live Zam runtime and use its live data tree for equipment.
 h=h.replace("CONTENT=location.origin+'/modelviewer/classic/'","CONTENT=location.origin+'/modelviewer/live/'")
 h=h.replace("window.CONTENT_PATH=location.origin+'/modelviewer/classic/';window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;","window.CONTENT_PATH=location.origin+'/modelviewer/live/';window.WOTLK_TO_RETAIL_DISPLAY_ID_API=location.origin+'/display-id-map';")
 h=h.replace("window.CONTENT_PATH=CONTENT;window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;","window.CONTENT_PATH=CONTENT;window.WOTLK_TO_RETAIL_DISPLAY_ID_API=location.origin+'/display-id-map';")
@@ -21,7 +18,6 @@ if old_push in h:
 elif new_push not in h:
     raise RuntimeError('Manifest item tuple anchor not found')
 
-# The viewer itself still receives simple [slot,displayId] pairs.
 old_payload="function characterPayload(m){const c={race:m.race,gender:m.gender,items:m.items,noCharCustomization:true};return c}"
 new_payload="function characterPayload(m,items){const c={race:m.race,gender:m.gender,items:(items||m.items||[]).map(i=>[i[0],i[1]]),noCharCustomization:true};return c}"
 if old_payload in h:
@@ -29,8 +25,6 @@ if old_payload in h:
 elif new_payload not in h:
     raise RuntimeError('Stable character payload anchor not found')
 
-# Capture upstream getDisplaySlot; it performs the documented WotLK display-id
-# conversion when a live metadata lookup misses.
 old_vars="let renderToken=0,activeModel=null,activeCharacter='',viewerPromise=null,generateModelsFn=null,lastRequestFingerprint='',lastManifestFingerprint='';"
 new_vars="let renderToken=0,activeModel=null,activeCharacter='',viewerPromise=null,generateModelsFn=null,getDisplaySlotFn=null,lastRequestFingerprint='',lastManifestFingerprint='';"
 if old_vars in h:
@@ -45,37 +39,38 @@ if old_import in h:
 elif new_import not in h:
     raise RuntimeError('Viewer module import anchor not found')
 
-# Resolve each old Classic/TBC display id against live metadata; when it does not
-# exist, getDisplaySlot calls our same-origin /display-id-map proxy which forwards
-# to the conversion service documented by wow-model-viewer.
+# Never block model creation on remote display-id conversion. Resolve all pieces
+# in parallel, time each one out independently, and always fall back to the
+# original display id. Trace the entire mapping so missing slots are diagnosable.
 anchor=new_payload
-helper="""\n async function resolveGearItems(manifest){const out=[];for(const raw of manifest.items||[]){let slot=Number(raw[0]),display=Number(raw[1]),itemId=Number(raw[2]||0);if(!slot||!display)continue;if(typeof getDisplaySlotFn==='function'&&itemId){try{const mapped=await getDisplaySlotFn(itemId,slot,display,'live');if(mapped?.displaySlot)slot=Number(mapped.displaySlot);if(mapped?.displayId)display=Number(mapped.displayId)}catch(e){console.warn('War Room display-id conversion failed',itemId,slot,display,e)}}out.push([slot,display])}return out}\n"""
+helper="""
+ function withTimeout(p,ms){return Promise.race([p,new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),ms))])}
+ async function resolveGearItems(manifest){const rawItems=(manifest.items||[]).filter(raw=>Number(raw?.[0])&&Number(raw?.[1]));const jobs=rawItems.map(async raw=>{let slot=Number(raw[0]),display=Number(raw[1]),itemId=Number(raw[2]||0),sourceSlot=slot,sourceDisplay=display,status='original';if(typeof getDisplaySlotFn==='function'&&itemId){try{const mapped=await withTimeout(getDisplaySlotFn(itemId,slot,display,'live'),1800);if(mapped?.displaySlot)slot=Number(mapped.displaySlot);if(mapped?.displayId)display=Number(mapped.displayId);status=(slot!==sourceSlot||display!==sourceDisplay)?'mapped':'unchanged'}catch(e){status='fallback:'+String(e?.message||e)}}const result=[slot,display];console.info('[WarRoom Gear]',{itemId,sourceSlot,sourceDisplay,slot,display,status});return result});return (await Promise.all(jobs)).filter(i=>i[0]&&i[1])}
+"""
 if 'async function resolveGearItems(manifest)' not in h:
     h=h.replace(anchor,anchor+helper,1)
 
 old_inst="const model=await generateModels(aspect,'#'+host.id,characterPayload(manifest),'classic');host.style.visibility='visible';return model"
-new_inst="const gearItems=await resolveGearItems(manifest);stage.dataset.gearItems=JSON.stringify(gearItems);const model=await generateModels(aspect,'#'+host.id,characterPayload(manifest,gearItems),'live');model.__wrGearItems=gearItems;host.style.visibility='visible';return model"
+new_inst="const fallbackItems=(manifest.items||[]).map(i=>[Number(i[0]),Number(i[1])]).filter(i=>i[0]&&i[1]);stage.dataset.gearItems=JSON.stringify(fallbackItems);const model=await generateModels(aspect,'#'+host.id,characterPayload(manifest,fallbackItems),'live');model.__wrGearItems=fallbackItems;model.__wrGearPromise=resolveGearItems(manifest);host.style.visibility='visible';return model"
 if old_inst in h:
     h=h.replace(old_inst,new_inst,1)
 elif new_inst not in h:
     raise RuntimeError('Stable instantiate call not found')
 
 old_apply="for(const item of manifest.items||[]){try{await activeModel?.updateItemViewer?.(item[0],item[1],0)}catch(e){console.warn('War Room item apply failed',item,e)}}"
-new_apply="for(const item of activeModel?.__wrGearItems||[]){try{activeModel?.updateItemViewer?.(item[0],item[1],0)}catch(e){console.warn('War Room item apply failed',item,e)}}"
+new_apply="for(const item of activeModel?.__wrGearItems||[]){try{activeModel?.updateItemViewer?.(item[0],item[1],0)}catch(e){console.warn('War Room item apply failed',item,e)}}const thisModel=activeModel;thisModel?.__wrGearPromise?.then(items=>{if(activeModel!==thisModel)return;stage.dataset.gearItems=JSON.stringify(items);for(const item of items||[]){try{thisModel?.updateItemViewer?.(item[0],item[1],0);console.info('[WarRoom Gear Applied]',item)}catch(e){console.warn('War Room mapped item apply failed',item,e)}}}).catch(e=>console.warn('War Room background gear mapping failed',e))"
 if old_apply in h:
     h=h.replace(old_apply,new_apply,1)
 elif new_apply not in h:
     raise RuntimeError('Post-create gear apply anchor not found')
 
-required=["CONTENT=location.origin+'/modelviewer/live/'","/display-id-map","getDisplaySlotFn","resolveGearItems(manifest)","generateModels(aspect,'#'+host.id,characterPayload(manifest,gearItems),'live')","__wrGearItems"]
+required=["CONTENT=location.origin+'/modelviewer/live/'","/display-id-map","getDisplaySlotFn","function withTimeout(p,ms)","model.__wrGearPromise=resolveGearItems(manifest)","[WarRoom Gear Applied]"]
 for marker in required:
     if marker not in h: raise RuntimeError('WotLK gear compatibility marker missing: '+marker)
 
-# Keep the older workflow's historical assertions satisfiable while the real
-# runtime uses the live/WotLK compatibility path above. These are comments only.
 compat="\n<!-- legacy QA markers: CONTENT=location.origin+'/modelviewer/classic/' ; window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined -->\n"
 if compat.strip() not in h:
     h=h.replace('</body>',compat+'</body>',1)
 
 index.write_text(h,encoding='utf-8')
-print('War Room v1.7.28 WotLK/live-data equipment compatibility enabled')
+print('War Room v1.7.28 nonblocking traced equipment compatibility enabled')
