@@ -59,6 +59,48 @@ if scoped_generate in h:
 elif old_generate not in h:
     raise RuntimeError('3D generateModels call not found after lexical $ isolation')
 
+# Classic viewer stability + gear hotfix.
+# 1) Classic docs explicitly call out noCharCustomization for item rendering;
+#    force it so a valid race/gender model does not silently render naked.
+old_payload="function characterPayload(m){const c={race:m.race,gender:m.gender,items:m.items};for(const k of ['skin','face','hairStyle','hairColor','facialStyle'])if(Number.isInteger(m[k]))c[k]=m[k];if(!['skin','face','hairStyle','hairColor','facialStyle'].some(k=>Number.isInteger(m[k])))c.noCharCustomization=true;return c}"
+new_payload="function characterPayload(m){const c={race:m.race,gender:m.gender,items:m.items,noCharCustomization:true};return c}"
+if old_payload in h:
+    h=h.replace(old_payload,new_payload,1)
+elif new_payload not in h:
+    raise RuntimeError('Character payload function not found for Classic gear mode')
+
+# 2) The Inspect-ready event can fire repeatedly for the same character snapshot.
+#    Previously every event destroyed/recreated the viewer, causing the exact
+#    naked-model <-> loading-text flash seen in the app. Deduplicate identical
+#    raw snapshots before manifest work and identical manifests after resolution.
+old_vars="let renderToken=0,activeModel=null,activeCharacter='',viewerPromise=null,generateModelsFn=null;"
+new_vars="let renderToken=0,activeModel=null,activeCharacter='',viewerPromise=null,generateModelsFn=null,lastRequestFingerprint='',lastManifestFingerprint='';"
+if old_vars in h:
+    h=h.replace(old_vars,new_vars,1)
+elif new_vars not in h:
+    raise RuntimeError('3D viewer state variables not found for render dedupe')
+
+fingerprint_anchor="function characterPayload(m){const c={race:m.race,gender:m.gender,items:m.items,noCharCustomization:true};return c}"
+fingerprint_code="""function rawFingerprint(c){const gear=Array.isArray(c?.items)?c.items:Array.isArray(c?.gear)?c.gear:Array.isArray(c?.equipment)?c.equipment:[];return JSON.stringify([c?.name||'',c?.race??'',c?.gender??'',gear.map(i=>[i?.slot??i?.slotId??i?.slot_id??'',i?.id??i?.itemId??i?.item_id??'',i?.displayId??i?.displayID??i?.display_id??''])])}\n function manifestFingerprint(m){return JSON.stringify([m?.race,m?.gender,m?.skin,m?.face,m?.hairStyle,m?.hairColor,m?.facialStyle,m?.items||[]])}"""
+if fingerprint_code not in h:
+    if fingerprint_anchor not in h: raise RuntimeError('Unable to anchor viewer fingerprint helpers')
+    h=h.replace(fingerprint_anchor,fingerprint_anchor+fingerprint_code,1)
+
+old_render="async function render(character){const token=++renderToken,stage=ensureStage();if(!stage||!character)return;activeCharacter=character.name||'';state(stage,'3D Character Model','Resolving character appearance…',activeCharacter||'unnamed character');if(!window.WarRoomCharacterModelManifest){state(stage,'3D Viewer Error','Manifest module unavailable.','stage mounted successfully');return}let manifest;try{manifest=await window.WarRoomCharacterModelManifest.build(character)}catch(e){state(stage,'3D Manifest Error',e?.message||String(e));return}if(token!==renderToken)return;if(!manifest?.ready){state(stage,'3D Data Waiting','Race/gender metadata missing.','race='+String(manifest?.race)+' gender='+String(manifest?.gender));return}stage.dataset.manifest=JSON.stringify(manifest);try{try{activeModel?.destroy?.()}catch(e){}for(const n of [...stage.querySelectorAll('[id^=\"wr-model-canvas-\"]')])n.remove();activeModel=await instantiate(stage,manifest);if(token!==renderToken){try{activeModel?.destroy?.()}catch(e){}return}const status=stage.querySelector('.wr-model-state');if(status)status.style.display='none';try{activeModel?.setDistance?.(4.2)}catch(e){}}catch(e){state(stage,'3D Viewer Error',e?.message||String(e),'race '+manifest.race+' • '+manifest.resolvedItems+' appearances');console.warn('War Room model viewer:',e)}}"
+new_render="async function render(character){const stage=ensureStage();if(!stage||!character)return;const requestFp=rawFingerprint(character);if(requestFp===lastRequestFingerprint&&activeModel)return;lastRequestFingerprint=requestFp;const token=++renderToken;activeCharacter=character.name||'';if(!activeModel)state(stage,'3D Character Model','Resolving character appearance…',activeCharacter||'unnamed character');if(!window.WarRoomCharacterModelManifest){state(stage,'3D Viewer Error','Manifest module unavailable.','stage mounted successfully');return}let manifest;try{manifest=await window.WarRoomCharacterModelManifest.build(character)}catch(e){state(stage,'3D Manifest Error',e?.message||String(e));return}if(token!==renderToken)return;if(!manifest?.ready){state(stage,'3D Data Waiting','Race/gender metadata missing.','race='+String(manifest?.race)+' gender='+String(manifest?.gender));return}const manifestFp=manifestFingerprint(manifest);if(manifestFp===lastManifestFingerprint&&activeModel)return;stage.dataset.manifest=JSON.stringify(manifest);try{const oldModel=activeModel;const oldCanvases=[...stage.querySelectorAll('[id^=\"wr-model-canvas-\"]')];const newModel=await instantiate(stage,manifest);if(token!==renderToken){try{newModel?.destroy?.()}catch(e){}return}activeModel=newModel;lastManifestFingerprint=manifestFp;for(const item of manifest.items||[]){try{await activeModel?.updateItemViewer?.(item[0],item[1],0)}catch(e){console.warn('War Room item apply failed',item,e)}}try{oldModel?.destroy?.()}catch(e){}for(const n of oldCanvases)n.remove();const status=stage.querySelector('.wr-model-state');if(status)status.style.display='none';try{activeModel?.setDistance?.(4.2)}catch(e){}}catch(e){lastRequestFingerprint='';state(stage,'3D Viewer Error',e?.message||String(e),'race '+manifest.race+' • '+manifest.resolvedItems+' appearances');console.warn('War Room model viewer:',e)}}"
+if old_render in h:
+    h=h.replace(old_render,new_render,1)
+elif new_render not in h:
+    raise RuntimeError('3D render function not found for stable lifecycle patch')
+
+# 3) Do not re-display the loading overlay while a model is already visible.
+old_instantiate="async function instantiate(stage,manifest){state(stage,'3D Character Model','Loading live renderer + Classic data…','race '+manifest.race+' • gender '+manifest.gender+' • '+manifest.resolvedItems+' appearances');const generateModels=await loadViewer();state(stage,'3D Character Model','Creating Classic model canvas…','ZamModelViewer + generateModels ready');const host=document.createElement('div');host.id='wr-model-canvas-'+renderToken;stage.insertBefore(host,stage.firstChild);const aspect=Math.max(.85,Math.min(1.8,(stage.clientWidth||480)/(stage.clientHeight||320)));return await generateModels(aspect,'#'+host.id,characterPayload(manifest),'classic')}"
+new_instantiate="async function instantiate(stage,manifest){const hasModel=!!stage.querySelector('canvas');if(!hasModel)state(stage,'3D Character Model','Loading live renderer + Classic data…','race '+manifest.race+' • gender '+manifest.gender+' • '+manifest.resolvedItems+' appearances');const generateModels=await loadViewer();if(!hasModel)state(stage,'3D Character Model','Creating Classic model canvas…','ZamModelViewer + generateModels ready');const host=document.createElement('div');host.id='wr-model-canvas-'+renderToken;host.style.visibility=hasModel?'hidden':'visible';stage.insertBefore(host,stage.firstChild);const aspect=Math.max(.85,Math.min(1.8,(stage.clientWidth||480)/(stage.clientHeight||320)));const model=await generateModels(aspect,'#'+host.id,characterPayload(manifest),'classic');host.style.visibility='visible';return model}"
+if old_instantiate in h:
+    h=h.replace(old_instantiate,new_instantiate,1)
+elif new_instantiate not in h:
+    raise RuntimeError('3D instantiate function not found for no-flash patch')
+
 marker='/* War Room v1.7.28 - Remove dossier rune row */'
 css='''\n/* War Room v1.7.28 - Remove dossier rune row */\n#drawer .dossier-runes{display:none!important}\n#drawer #dsGS{display:none!important}\n#drawer #dsGS + span{display:none!important}\n#drawer .ds:has(#dsGS){display:none!important}\n#drawer .detail-box:has(#dGs){display:none!important}\n'''
 if marker not in h:
@@ -77,8 +119,8 @@ if old_helper in h or re.search(r'(?<![A-Za-z0-9_$])\$\(', h):
     raise RuntimeError('Lexical War Room $ collision or unrenamed War Room $ call remains')
 if new_helper not in h or 'wrQuery("#toast")' not in h:
     raise RuntimeError('War Room query helper rename did not propagate to app calls')
-for required in [marker,'#drawer .dossier-runes{display:none!important}','#drawer .ds:has(#dsGS){display:none!important}','#drawer .detail-box:has(#dGs){display:none!important}']:
-    if required not in h: raise RuntimeError('Inspect cleanup marker missing: '+required)
+for required in [marker,'#drawer .dossier-runes{display:none!important}','#drawer .ds:has(#dsGS){display:none!important}','#drawer .detail-box:has(#dGs){display:none!important}',new_payload,'rawFingerprint(c)','manifestFingerprint(m)','updateItemViewer?.(item[0],item[1],0)','lastManifestFingerprint']:
+    if required not in h: raise RuntimeError('v1.7.28 stable 3D marker missing: '+required)
 
 index.write_text(h,encoding='utf-8')
-print('War Room v1.7.28 hotfix: lexical $ isolated + static jQuery/viewer runtime + GearScore UI removed')
+print('War Room v1.7.28 hotfix: stable 3D lifecycle + forced Classic gear + lexical $ isolation')
