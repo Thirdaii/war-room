@@ -1,19 +1,9 @@
 name: Auto Publish War Room
 on:
   push:
-    branches: [main]
+    branches: [main, v1.7.28-model-proxy]
     paths:
-      - build/version.txt
-      - build/patch.py
-      - build/WarRoomLauncher.cs
-      - build/v178_launcher_patch.py
-      - build/v178_integrate.py
-      - build/v17_integrate.py
-      - build/raid_intelligence.js
-      - build/raid_intelligence_ui.js
-      - build/raid_intelligence.css
-      - build/tbc_phase3_rules.json
-      - build/phase3_boss_profiles.json
+      - build/**
       - .github/workflows/auto-release.yml
   workflow_dispatch:
 permissions:
@@ -58,7 +48,7 @@ jobs:
           python build/patch.py work/app
           python build/v17_integrate.py work/app
           python build/v178_integrate.py work/app
-          python -c "import json,re,pathlib; r=pathlib.Path('work/app'); expected=pathlib.Path('build/version.txt').read_text(encoding='utf-8').strip(); assert json.loads((r/'version.json').read_text(encoding='utf-8'))['version']==expected; h=(r/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); assert s; pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert 'WarRoomRaidIntelligence' in h and 'wrRaidIntelLive' in h; assert "VIEWER_SRC='/modelviewer/classic/viewer/viewer.min.js'" in h; assert "CONTENT=location.origin+'/modelviewer/classic/'" in h; assert '/item-appearance?id=' in h"
+          python -c "import json,re,pathlib; r=pathlib.Path('work/app'); expected=pathlib.Path('build/version.txt').read_text(encoding='utf-8').strip(); assert json.loads((r/'version.json').read_text(encoding='utf-8'))['version']==expected; h=(r/'index.html').read_text(encoding='utf-8'); s=re.findall(r'<script>(.*?)</script>',h,re.S); assert s; pathlib.Path('work/check.js').write_text('\n'.join(s),encoding='utf-8'); assert 'WarRoomRaidIntelligence' in h and 'wrRaidIntelLive' in h; assert "CONTENT=location.origin+'/modelviewer/live/'" in h; assert '/display-id-map/' in h; assert 'wrForceConvertItem' in h; assert 'forced-convert' in h; assert 'WarRoom Blend Probe' in h; assert '/item-appearance?id=' in h"
           node --check work/check.js
           node --check build/raid_intelligence.js
           node --check build/raid_intelligence_ui.js
@@ -66,17 +56,14 @@ jobs:
           $tokens=$null
           $parseErrors=$null
           [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'work/app/WarRoomUpdater.ps1'),[ref]$tokens,[ref]$parseErrors) | Out-Null
-          if ($parseErrors.Count -gt 0) {
-            $parseErrors | ForEach-Object { Write-Error $_.Message }
-            throw "WarRoomUpdater.ps1 failed PowerShell syntax validation."
-          }
+          if ($parseErrors.Count -gt 0) { $parseErrors | ForEach-Object { Write-Error $_.Message }; throw "WarRoomUpdater.ps1 failed PowerShell syntax validation." }
 
       - name: Build native War Room launcher
         shell: pwsh
         run: |
           python build/v178_launcher_patch.py
           $launcher = Get-Content build/WarRoomLauncher.cs -Raw
-          foreach ($required in @('/item-appearance','/modelviewer/classic/','HandleItemAppearance','HandleModelViewerProxy','modelViewerProxy','itemAppearances')) {
+          foreach ($required in @('/item-appearance','/modelviewer/','/display-id-map','HandleItemAppearance','HandleModelViewerProxy','modelViewerProxy','itemAppearances')) {
             if (-not $launcher.Contains($required)) { throw "Patched launcher missing $required" }
           }
           $icon = (Resolve-Path "work/app/assets/icons/WarRoom.ico").Path
@@ -101,7 +88,15 @@ jobs:
           if ($names -notcontains 'War Room.exe') { throw 'Package missing War Room.exe.' }
           if ($names -notcontains 'WarRoomUpdater.ps1') { throw 'Package missing updater.' }
 
+      - name: Upload feature-branch test artifact
+        if: github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: WarRoom-v1.7.28-rectangle-diagnostics
+          path: work/WarRoom-App.zip
+
       - name: Publish latest release
+        if: github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
