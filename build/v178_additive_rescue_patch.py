@@ -5,34 +5,59 @@ root=Path(sys.argv[1])
 index=root/'index.html'
 h=index.read_text(encoding='utf-8')
 
-MARK='War Room v1.7.28 - Pixel Rectangle Probe v9'
+MARK='War Room v1.7.28 - Program14 additive alpha preserve v10'
 script=r'''<script>
-/* War Room v1.7.28 - Pixel Rectangle Probe v9 */
+/* War Room v1.7.28 - Program14 additive alpha preserve v10 */
 (function(){
-  if(window.__wrPixelProbeInstalled)return;
-  window.__wrPixelProbeInstalled=true;
+  if(window.__wrP14AlphaFixInstalled)return;
+  window.__wrP14AlphaFixInstalled=true;
+  window.__wrP14AlphaFixEnabled=true;
+  window.__wrP14AlphaFixStats={draws:0,candidates:0,fixed:0,last:null};
   const states=new WeakMap(),programIds=new WeakMap();let nextProgramId=1;
-  const boundCanvases=new WeakSet();
-  window.__wrPixelProbe={armed:false,active:false,x:0,y:0,remaining:0,changes:[],hits:[],detected:null,skipKey:null,skipEnabled:false};
   function pid(p){if(!p)return 0;let id=programIds.get(p);if(!id){id=nextProgramId++;programIds.set(p,id)}return id}
-  function st(gl){let s=states.get(gl);if(!s){s={program:0,blend:false,cull:false,depthMask:true,srcRGB:null,dstRGB:null};states.set(gl,s)}return s}
-  function rgba(gl){const q=window.__wrPixelProbe,b=new Uint8Array(4);try{gl.readPixels(q.x,q.y,1,1,gl.RGBA,gl.UNSIGNED_BYTE,b);return [b[0],b[1],b[2],b[3]]}catch(_e){return null}}
-  function delta(a,b){if(!a||!b)return 0;return Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1])+Math.abs(a[2]-b[2])+Math.abs(a[3]-b[3])}
-  function key(s,mode,count){return `${s.program}|${mode}|${count}`}
-  function afterDraw(gl,kind,mode,count,before){const q=window.__wrPixelProbe;if(!q.active)return;const after=rgba(gl);if(!after)return;const d=delta(before,after);if(d>=16){const s=st(gl),row={t:Math.round(performance.now()),kind,program:s.program,mode,count,before,after,blend:s.blend,cull:s.cull,depthMask:s.depthMask,srcRGB:s.srcRGB,dstRGB:s.dstRGB,delta:d};q.changes.push(row);if(q.changes.length>80)q.changes.shift();const dark=after[0]<=40&&after[1]<=40&&after[2]<=40;const alphaJump=after[3]>=before[3]+48;const darkDrop=(before[0]+before[1]+before[2])-(after[0]+after[1]+after[2])>=90;if(dark&&(alphaJump||darkDrop)){q.hits.push(row);if(q.hits.length>20)q.hits.shift();if(!q.detected){q.detected=row;q.skipKey=key(s,mode,count);updatePanel()}}}q.remaining--;if(q.detected||q.remaining<=0){q.active=false;updatePanel()}}
-  function install(p){if(!p||p.__wrPixelProbe)return;p.__wrPixelProbe=true;const raw={enable:p.enable,disable:p.disable,depthMask:p.depthMask,blendFunc:p.blendFunc,blendFuncSeparate:p.blendFuncSeparate,useProgram:p.useProgram,drawElements:p.drawElements,drawArrays:p.drawArrays};if(raw.enable)p.enable=function(cap){try{const s=st(this);if(cap===this.BLEND)s.blend=true;if(cap===this.CULL_FACE)s.cull=true}catch(_e){}return raw.enable.apply(this,arguments)};if(raw.disable)p.disable=function(cap){try{const s=st(this);if(cap===this.BLEND)s.blend=false;if(cap===this.CULL_FACE)s.cull=false}catch(_e){}return raw.disable.apply(this,arguments)};if(raw.depthMask)p.depthMask=function(v){try{st(this).depthMask=!!v}catch(_e){}return raw.depthMask.apply(this,arguments)};if(raw.blendFunc)p.blendFunc=function(a,b){try{const s=st(this);s.srcRGB=a;s.dstRGB=b}catch(_e){}return raw.blendFunc.apply(this,arguments)};if(raw.blendFuncSeparate)p.blendFuncSeparate=function(a,b,c,d){try{const s=st(this);s.srcRGB=a;s.dstRGB=b}catch(_e){}return raw.blendFuncSeparate.apply(this,arguments)};if(raw.useProgram)p.useProgram=function(pr){try{st(this).program=pid(pr)}catch(_e){}return raw.useProgram.apply(this,arguments)};if(raw.drawElements)p.drawElements=function(mode,count,type,offset){const q=window.__wrPixelProbe,s=st(this),k=key(s,mode,count);if(q.skipKey&&q.skipEnabled&&k===q.skipKey)return;const before=q.active?rgba(this):null;const ret=raw.drawElements.apply(this,arguments);if(q.active)afterDraw(this,'drawElements',mode,Number(count)||0,before);return ret};if(raw.drawArrays)p.drawArrays=function(mode,first,count){const q=window.__wrPixelProbe,s=st(this),k=key(s,mode,count);if(q.skipKey&&q.skipEnabled&&k===q.skipKey)return;const before=q.active?rgba(this):null;const ret=raw.drawArrays.apply(this,arguments);if(q.active)afterDraw(this,'drawArrays',mode,Number(count)||0,before);return ret}}
-  install(window.WebGLRenderingContext&&WebGLRenderingContext.prototype);install(window.WebGL2RenderingContext&&WebGL2RenderingContext.prototype);
-  function panel(){return document.querySelector('.wr-pixel-probe-v9')}
-  function statusText(){const q=window.__wrPixelProbe;if(q.armed)return 'CLICK A BLACK RECTANGLE';if(q.active)return 'PROBING DRAW CALLS...';if(q.detected)return `DETECTED: P${q.detected.program} x ${q.detected.count}`;return 'READY'}
-  function updatePanel(){const el=panel();if(!el)return;const q=window.__wrPixelProbe,s=el.querySelector('.wrpp-status');if(s)s.textContent=statusText();const b=el.querySelector('.wrpp-hide');if(b){b.disabled=!q.detected;b.textContent=q.skipEnabled?'RESTORE DETECTED':'HIDE DETECTED';b.style.opacity=q.detected?'1':'.45'}}
-  function bindCanvas(canvas){if(!canvas||boundCanvases.has(canvas))return;boundCanvases.add(canvas);canvas.addEventListener('pointerdown',function(ev){const q=window.__wrPixelProbe;if(!q.armed)return;ev.preventDefault();ev.stopPropagation();const r=canvas.getBoundingClientRect();q.x=Math.max(0,Math.min(canvas.width-1,Math.round((ev.clientX-r.left)*canvas.width/r.width)));q.y=Math.max(0,Math.min(canvas.height-1,Math.round((r.bottom-ev.clientY)*canvas.height/r.height)));q.armed=false;q.active=true;q.remaining=5000;q.changes=[];q.hits=[];q.detected=null;q.skipKey=null;q.skipEnabled=false;updatePanel()},true)}
-  function addPanel(){const stage=document.getElementById('wr-character-model-stage');if(!stage)return;stage.querySelectorAll('canvas').forEach(bindCanvas);if(panel())return;const box=document.createElement('div');box.className='wr-pixel-probe-v9';box.style.cssText='position:absolute;z-index:45;left:8px;top:8px;width:188px;padding:8px;border:1px solid #7b5938;background:rgba(7,6,6,.94);box-shadow:0 5px 22px rgba(0,0,0,.5);font:700 8px Arial;color:#d8bb83;letter-spacing:.045em';box.innerHTML='<div style="font-size:10px;color:#f0cf91;margin-bottom:4px">PIXEL RECTANGLE PROBE V9</div><div style="font-size:7px;color:#9f8d78;margin-bottom:7px">Arm, then click the visible black board. V9 watches that exact framebuffer pixel and finds the draw that makes it dark/opaque.</div><div class="wrpp-status" style="padding:6px;border:1px solid #4e3a28;margin-bottom:6px;color:#f2d7a1">READY</div>';function button(cls,text){const b=document.createElement('button');b.type='button';b.className=cls;b.textContent=text;b.style.cssText='display:block;width:100%;margin:4px 0;padding:6px;border:1px solid #8a603a;background:#241910;color:#ead6ae;font:800 7px Arial;cursor:pointer';box.appendChild(b);return b}const arm=button('wrpp-arm','ARM PROBE');arm.onclick=()=>{const q=window.__wrPixelProbe;q.armed=true;q.active=false;q.detected=null;q.skipKey=null;q.skipEnabled=false;q.changes=[];q.hits=[];stage.querySelectorAll('canvas').forEach(bindCanvas);updatePanel()};const hide=button('wrpp-hide','HIDE DETECTED');hide.disabled=true;hide.style.opacity='.45';hide.onclick=()=>{const q=window.__wrPixelProbe;if(!q.detected)return;q.skipEnabled=!q.skipEnabled;updatePanel()};const copy=button('wrpp-copy','COPY PROBE LOG');copy.onclick=async()=>{const q=window.__wrPixelProbe,t=JSON.stringify({point:{x:q.x,y:q.y},detected:q.detected,skipKey:q.skipKey,hits:q.hits,changes:q.changes},null,2);try{await navigator.clipboard.writeText(t);copy.textContent='LOG COPIED';setTimeout(()=>copy.textContent='COPY PROBE LOG',1200)}catch(_e){console.info('[WarRoom Pixel Probe V9]',t)}};const reset=button('wrpp-reset','RESET');reset.onclick=()=>{Object.assign(window.__wrPixelProbe,{armed:false,active:false,remaining:0,changes:[],hits:[],detected:null,skipKey:null,skipEnabled:false});updatePanel()};stage.appendChild(box);updatePanel()}
-  new MutationObserver(addPanel).observe(document.documentElement,{subtree:true,childList:true});setTimeout(addPanel,400);setTimeout(addPanel,1500);console.info('[WarRoom Pixel Rectangle Probe v9] installed. Rendering stays original until HIDE DETECTED is enabled.');
+  function st(gl){let s=states.get(gl);if(!s){s={program:0,blend:false,srcRGB:null,dstRGB:null,srcAlpha:null,dstAlpha:null};states.set(gl,s)}return s}
+  function install(p){
+    if(!p||p.__wrP14AlphaFix)return;p.__wrP14AlphaFix=true;
+    const raw={enable:p.enable,disable:p.disable,blendFunc:p.blendFunc,blendFuncSeparate:p.blendFuncSeparate,useProgram:p.useProgram,drawElements:p.drawElements,drawArrays:p.drawArrays};
+    if(typeof raw.enable==='function')p.enable=function(cap){try{if(cap===this.BLEND)st(this).blend=true}catch(_e){}return raw.enable.apply(this,arguments)};
+    if(typeof raw.disable==='function')p.disable=function(cap){try{if(cap===this.BLEND)st(this).blend=false}catch(_e){}return raw.disable.apply(this,arguments)};
+    if(typeof raw.blendFunc==='function')p.blendFunc=function(a,b){try{const s=st(this);s.srcRGB=a;s.dstRGB=b;s.srcAlpha=a;s.dstAlpha=b}catch(_e){}return raw.blendFunc.apply(this,arguments)};
+    if(typeof raw.blendFuncSeparate==='function')p.blendFuncSeparate=function(a,b,c,d){try{const s=st(this);s.srcRGB=a;s.dstRGB=b;s.srcAlpha=c;s.dstAlpha=d}catch(_e){}return raw.blendFuncSeparate.apply(this,arguments)};
+    if(typeof raw.useProgram==='function')p.useProgram=function(pr){try{st(this).program=pid(pr)}catch(_e){}return raw.useProgram.apply(this,arguments)};
+    function draw(kind,original,args){
+      const gl=this,s=st(gl),mode=args[0],count=Number(kind==='drawElements'?args[1]:args[2])||0,stats=window.__wrP14AlphaFixStats;stats.draws++;
+      const candidate=s.program===14&&mode===gl.TRIANGLES&&count===48&&s.blend===true&&s.srcRGB===gl.SRC_ALPHA&&s.dstRGB===gl.ONE;
+      if(candidate)stats.candidates++;
+      if(!candidate||window.__wrP14AlphaFixEnabled===false||typeof raw.blendFuncSeparate!=='function')return original.apply(gl,args);
+      const old={srcRGB:s.srcRGB,dstRGB:s.dstRGB,srcAlpha:s.srcAlpha,dstAlpha:s.dstAlpha};
+      try{
+        /* RGB stays exactly as Zam requested: SRC_ALPHA + ONE additive.
+           Alpha is preserved from the destination so a black additive texel cannot
+           turn a transparent canvas pixel into opaque black. */
+        raw.blendFuncSeparate.call(gl,gl.SRC_ALPHA,gl.ONE,gl.ZERO,gl.ONE);
+        stats.fixed++;stats.last={t:Math.round(performance.now()),program:s.program,count,old};
+        return original.apply(gl,args);
+      } finally {
+        if(old.srcRGB!=null&&old.dstRGB!=null){
+          if(old.srcAlpha!=null&&old.dstAlpha!=null)raw.blendFuncSeparate.call(gl,old.srcRGB,old.dstRGB,old.srcAlpha,old.dstAlpha);
+          else if(typeof raw.blendFunc==='function')raw.blendFunc.call(gl,old.srcRGB,old.dstRGB);
+        }
+      }
+    }
+    if(typeof raw.drawElements==='function')p.drawElements=function(){return draw.call(this,'drawElements',raw.drawElements,arguments)};
+    if(typeof raw.drawArrays==='function')p.drawArrays=function(){return draw.call(this,'drawArrays',raw.drawArrays,arguments)};
+  }
+  install(window.WebGLRenderingContext&&WebGLRenderingContext.prototype);
+  install(window.WebGL2RenderingContext&&WebGL2RenderingContext.prototype);
+  window.wrP14AlphaFixReport=function(){return {...window.__wrP14AlphaFixStats,enabled:window.__wrP14AlphaFixEnabled}};
+  function addBadge(){const stage=document.getElementById('wr-character-model-stage');if(!stage||stage.querySelector('.wr-alpha-fix-v10'))return;const b=document.createElement('button');b.type='button';b.className='wr-alpha-fix-v10';b.textContent='ALPHA FIX V10 · ON';b.style.cssText='position:absolute;z-index:42;right:8px;top:8px;padding:5px 8px;border:1px solid #7b5938;background:rgba(7,6,6,.9);color:#e5c98f;font:800 7px Arial;letter-spacing:.06em;cursor:pointer';b.onclick=()=>{window.__wrP14AlphaFixEnabled=!window.__wrP14AlphaFixEnabled;b.textContent='ALPHA FIX V10 · '+(window.__wrP14AlphaFixEnabled?'ON':'OFF');b.style.borderColor=window.__wrP14AlphaFixEnabled?'#7b5938':'#7a2f2f'};stage.appendChild(b)}
+  new MutationObserver(addBadge).observe(document.documentElement,{subtree:true,childList:true});setTimeout(addBadge,500);setTimeout(addBadge,1800);
+  console.info('[WarRoom Alpha Fix v10] P14 x48 additive RGB preserved; destination alpha preserved. Toggle with the viewer badge or window.__wrP14AlphaFixEnabled.');
 })();
 </script>'''
 
 if MARK not in h:
-    if '</head>' not in h: raise RuntimeError('head marker missing for pixel probe')
+    if '</head>' not in h: raise RuntimeError('head marker missing for alpha preserve fix')
     h=h.replace('</head>',script+'\n</head>',1)
 index.write_text(h,encoding='utf-8')
-print('War Room v1.7.28 pixel rectangle probe v9 installed')
+print('War Room v1.7.28 program14 additive alpha preserve v10 installed')
