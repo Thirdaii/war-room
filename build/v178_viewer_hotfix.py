@@ -8,6 +8,7 @@ additive_rescue=here/'v178_additive_rescue_patch.py'
 roster_drag=here/'v178_roster_drag_patch.py'
 wow_portraits=here/'v178_wow_portraits_patch.py'
 group_drag=here/'v178_group_drag_patch.py'
-for script in (core,gear,blend_probe,additive_rescue,roster_drag,wow_portraits,group_drag):
+group_drag_v17=here/'v178_group_drag_v17_patch.py'
+for script in (core,gear,blend_probe,additive_rescue,roster_drag,wow_portraits,group_drag,group_drag_v17):
     ns={'__name__':'__main__','__file__':str(script)}
     exec(compile(script.read_text(encoding='utf-8'),str(script),'exec'),ns,ns)
