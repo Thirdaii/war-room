@@ -9,7 +9,7 @@ if MARK in s:
 if 'HandleGuildRoster' not in s or 'WarRoomRosterV24' not in s:
     raise RuntimeError('V21-V24 live roster launcher patches must run before V25')
 
-# ClassicArmory's current site loads guild data from this JSON POST API.  The
+# ClassicArmory's current site loads guild data from this JSON POST API. The
 # old V21 path scraped EpicForge HTML, whose guild snapshot can be months old.
 # Keep the old sources only as degraded fallbacks; try the current roster API
 # first and pass its JSON through unchanged for the V25 frontend normalizer.
@@ -59,7 +59,7 @@ s=s.replace(urls_anchor,classic_block+urls_anchor,1)
 s=s.replace('string[] sources={"EpicForge.au","ClassicArmory.gg","ClassicArmory.gg"};string lastError="";',
             'string[] sources={"EpicForge.au","ClassicArmory.gg","ClassicArmory.gg"};string lastError=classicError;',1)
 
-for marker in [MARK,'classic-armory.org/api/v1/guild','classic-armory-current-post-api','PostJsonText','X-WarRoom-Roster-Source"]:
+for marker in [MARK,'classic-armory.org/api/v1/guild','classic-armory-current-post-api','PostJsonText','X-WarRoom-Roster-Source']:
     if marker not in s:
         raise RuntimeError('V25 current roster marker missing: '+marker)
 p.write_text(s,encoding='utf-8')
