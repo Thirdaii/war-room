@@ -1,0 +1,49 @@
+name: Probe live roster source
+on:
+  push:
+    branches: [v1.7.28-model-proxy]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe ClassicArmory client/API
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re, urllib.request, urllib.parse
+          urls=[
+            'https://classic-armory.org/',
+            'https://classic-armory.org/guild/us/tbc-anniversary/dreamscythe/Me%20Not%20That%20Kind%20Of%20Orc'
+          ]
+          def get(u):
+            req=urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0 WarRoomProbe/1.0','Accept':'text/html,application/xhtml+xml,*/*'})
+            with urllib.request.urlopen(req,timeout=20) as r:
+              b=r.read(); print('FETCH',u,'status',r.status,'ct',r.headers.get('content-type'),'bytes',len(b)); return b.decode('utf-8','replace')
+          texts=[]
+          for u in urls:
+            try: texts.append((u,get(u)))
+            except Exception as e: print('ERROR',u,repr(e))
+          scripts=[]
+          for base,h in texts:
+            for src in re.findall(r'<script[^>]+src=["\']([^"\']+)',h,re.I):
+              full=urllib.parse.urljoin(base,src)
+              if full not in scripts: scripts.append(full)
+          print('SCRIPTS',len(scripts))
+          for s in scripts: print('SCRIPT',s)
+          for s in scripts:
+            try:
+              js=get(s)
+              hits=sorted(set(re.findall(r'https?://[^"\'\s)]+|/api/[A-Za-z0-9_?=&%./{}:-]+',js)))
+              useful=[x for x in hits if any(k in x.lower() for k in ('guild','realm','character','api'))]
+              if useful:
+                print('--- API HITS',s)
+                for x in useful[:200]: print(x)
+              for pat in ('guild/','/guild','guilds','member_count','tbc-anniversary'):
+                if pat in js:
+                  i=js.find(pat); print('CTX',pat,js[max(0,i-400):i+700].replace('\n',' ')[:1100])
+            except Exception as e: print('JSERROR',s,repr(e))
+          PY
