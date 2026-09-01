@@ -96,6 +96,40 @@ jobs:
             "$n present=$($names -contains $n)" | Tee-Object -FilePath work/integration.log -Append | Out-Host
           }
 
+      - name: Smoke test compiled War Room live roster endpoint
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'work/app/War Room.exe').Path
+          $proc = Start-Process -FilePath $exe -ArgumentList '--app' -WorkingDirectory (Resolve-Path 'work/app').Path -PassThru
+          try {
+            $base = $null
+            for ($attempt=0; $attempt -lt 30 -and -not $base; $attempt++) {
+              foreach ($port in 43871..43919) {
+                try {
+                  $health = Invoke-WebRequest -Uri "http://127.0.0.1:$port/health" -UseBasicParsing -TimeoutSec 1
+                  if ($health.StatusCode -eq 200) { $base = "http://127.0.0.1:$port"; break }
+                } catch {}
+              }
+              if (-not $base) { Start-Sleep -Milliseconds 250 }
+            }
+            if (-not $base) { throw 'Compiled War Room local server did not start' }
+            $resp = Invoke-WebRequest -Uri "$base/guild-roster?refresh=1" -UseBasicParsing -TimeoutSec 45
+            $resp.Content | Set-Content work/native-roster-response.json -Encoding UTF8
+            $src = [string]$resp.Headers['X-WarRoom-Roster-Source']
+            "Native /guild-roster source=$src status=$($resp.StatusCode)" | Tee-Object -FilePath work/integration.log -Append | Out-Host
+            if ($src -ne 'ClassicArmory.org') { throw "Compiled War Room did not use current ClassicArmory source; source=$src body=$($resp.Content.Substring(0,[Math]::Min(800,$resp.Content.Length)))" }
+            $data = $resp.Content | ConvertFrom-Json
+            $roster = @($data.roster)
+            $level70 = @($roster | Where-Object { [int]$_.level -eq 70 })
+            $names = @($roster | ForEach-Object { [string]$_.name })
+            if ($level70.Count -lt 10) { throw "Compiled endpoint returned too few level 70s: $($level70.Count)" }
+            foreach ($n in @('Moanlet','Lolmopsfloor','Boomple')) {
+              if ($names -contains $n) { throw "Compiled endpoint incorrectly contains departed member $n" }
+            }
+          } finally {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
+
       - name: Edge smoke test actual Classic 3D through local proxy
         shell: pwsh
         run: |
@@ -184,6 +218,7 @@ jobs:
           name: WarRoom-v1.7.28-DIAGNOSTICS
           path: |
             work/integration.log
+            work/native-roster-response.json
             work/viewer-smoke-dom.txt
             work/proxy-smoke.log
             work/proxy-smoke.err
