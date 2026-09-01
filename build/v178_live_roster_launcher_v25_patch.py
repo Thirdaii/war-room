@@ -23,7 +23,6 @@ post_method=r'''    private static string PostJsonText(string url,string json)
         req.UserAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 WarRoom/1.7.28";
         req.Accept="application/json, text/plain, */*";req.ContentType="application/json; charset=utf-8";
         req.Headers[HttpRequestHeader.AcceptLanguage]="en-US,en;q=0.9";
-        req.Headers[HttpRequestHeader.Origin]="https://classic-armory.org";
         req.Referer="https://classic-armory.org/guild/us/tbc-anniversary/dreamscythe/Me%20Not%20That%20Kind%20Of%20Orc";
         req.AutomaticDecompression=DecompressionMethods.GZip|DecompressionMethods.Deflate;
         req.ContentLength=body.Length;
