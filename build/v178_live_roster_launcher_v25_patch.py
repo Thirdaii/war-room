@@ -18,11 +18,13 @@ post_method=r'''    private static string PostJsonText(string url,string json)
     {
         byte[] body=Encoding.UTF8.GetBytes(json??"{}");
         var req=(HttpWebRequest)WebRequest.Create(url);
-        req.Method="POST";req.Proxy=null;req.AllowAutoRedirect=true;
-        req.Timeout=10000;req.ReadWriteTimeout=10000;
-        req.UserAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) WarRoom/1.7.28";
-        req.Accept="application/json,*/*";req.ContentType="application/json; charset=utf-8";
+        req.Method="POST";req.AllowAutoRedirect=true;
+        req.Timeout=15000;req.ReadWriteTimeout=15000;
+        req.UserAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 WarRoom/1.7.28";
+        req.Accept="application/json, text/plain, */*";req.ContentType="application/json; charset=utf-8";
         req.Headers[HttpRequestHeader.AcceptLanguage]="en-US,en;q=0.9";
+        req.Headers[HttpRequestHeader.Origin]="https://classic-armory.org";
+        req.Referer="https://classic-armory.org/guild/us/tbc-anniversary/dreamscythe/Me%20Not%20That%20Kind%20Of%20Orc";
         req.AutomaticDecompression=DecompressionMethods.GZip|DecompressionMethods.Deflate;
         req.ContentLength=body.Length;
         using(var rs=req.GetRequestStream())rs.Write(body,0,body.Length);
@@ -58,8 +60,11 @@ s=s.replace(urls_anchor,classic_block+urls_anchor,1)
 # If all degraded fallbacks fail, retain the current-source failure in detail.
 s=s.replace('string[] sources={"EpicForge.au","ClassicArmory.gg","ClassicArmory.gg"};string lastError="";',
             'string[] sources={"EpicForge.au","ClassicArmory.gg","ClassicArmory.gg"};string lastError=classicError;',1)
+# If a stale fallback succeeds, expose why the current source failed.
+s=s.replace('ctx.Response.Headers["X-WarRoom-Roster"]="live";ctx.Response.Headers["X-WarRoom-Roster-Source"]=sources[i];Write(ctx,200,"application/json; charset=utf-8",json);return;',
+            'ctx.Response.Headers["X-WarRoom-Roster"]="live";ctx.Response.Headers["X-WarRoom-Roster-Source"]=sources[i];if(!string.IsNullOrWhiteSpace(classicError))ctx.Response.Headers["X-WarRoom-Roster-Primary-Error"]=classicError;Write(ctx,200,"application/json; charset=utf-8",json);return;',1)
 
-for marker in [MARK,'classic-armory.org/api/v1/guild','classic-armory-current-post-api','PostJsonText','X-WarRoom-Roster-Source']:
+for marker in [MARK,'classic-armory.org/api/v1/guild','classic-armory-current-post-api','PostJsonText','X-WarRoom-Roster-Source','X-WarRoom-Roster-Primary-Error']:
     if marker not in s:
         raise RuntimeError('V25 current roster marker missing: '+marker)
 p.write_text(s,encoding='utf-8')
