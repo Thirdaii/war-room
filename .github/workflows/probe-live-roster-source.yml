@@ -14,22 +14,25 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-          import re, urllib.request, urllib.parse, json
-          def get(u,accept='*/*'):
-            req=urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0 WarRoomProbe/1.0','Accept':accept})
-            with urllib.request.urlopen(req,timeout=20) as r:
-              b=r.read(); print('FETCH',u,'status',r.status,'ct',r.headers.get('content-type'),'bytes',len(b)); return b.decode('utf-8','replace')
-          js=get('https://classic-armory.org/static/js/client_guild.js?v=6cc042e')
-          for m in re.finditer(r'/api/v1/guild',js):
-            i=m.start(); print('APICTX',js[max(0,i-1400):i+2200].replace('\n',' '))
-          candidates=[
-            'https://classic-armory.org/api/v1/guild?region=us&flavor=tbc-anniversary&realm=dreamscythe&name=Me%20Not%20That%20Kind%20Of%20Orc',
-            'https://classic-armory.org/api/v1/guild/us/tbc-anniversary/dreamscythe/Me%20Not%20That%20Kind%20Of%20Orc',
-            'https://classic-armory.org/api/v1/guild?region=us&realm=dreamscythe&name=Me%20Not%20That%20Kind%20Of%20Orc&flavor=tbc-anniversary'
-          ]
-          for u in candidates:
-            try:
-              body=get(u,'application/json,*/*')
-              print('BODY',u,body[:5000])
-            except Exception as e: print('ERROR',u,repr(e))
+          import urllib.request, json
+          u='https://classic-armory.org/api/v1/guild'
+          payload={'region':'us','realm':'dreamscythe','name':'Me Not That Kind Of Orc','flavor':'tbc-anniversary'}
+          data=json.dumps(payload).encode()
+          req=urllib.request.Request(u,data=data,method='POST',headers={'User-Agent':'Mozilla/5.0 WarRoomProbe/1.0','Content-Type':'application/json','Accept':'application/json'})
+          try:
+            with urllib.request.urlopen(req,timeout=30) as r:
+              b=r.read().decode('utf-8','replace'); print('STATUS',r.status,'CT',r.headers.get('content-type'),'BYTES',len(b)); print('BODY_HEAD',b[:3000])
+              obj=json.loads(b); roster=obj.get('roster') or (obj.get('guild') or {}).get('members') or (obj.get('guild') or {}).get('roster') or []
+              print('ROSTER_COUNT',len(roster))
+              lvl70=[m for m in roster if int(m.get('level') or 0)==70]
+              print('LEVEL70_COUNT',len(lvl70))
+              names={str(m.get('name') or m.get('character_name') or '').lower():m for m in roster}
+              for n in ['Moanlet','Lolmopsfloor','Boomple','Bigkili','Misanthropi']:
+                print('CHECK',n, json.dumps(names.get(n.lower()),ensure_ascii=False))
+              print('SAMPLE70',json.dumps(lvl70[:10],ensure_ascii=False)[:5000])
+          except Exception as e:
+            print('ERROR',repr(e))
+            if hasattr(e,'read'):
+              try: print('ERRBODY',e.read().decode('utf-8','replace')[:5000])
+              except: pass
           PY
