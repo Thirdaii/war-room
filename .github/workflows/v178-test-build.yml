@@ -57,15 +57,22 @@ jobs:
             'War Room v1.7.26 - Atomic per-character Inspect snapshots',
             'WarRoomInspectSnapshots','WarRoomCharacterModelManifest','wr-character-model-stage',
             'window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined','generateModels(aspect',
-            'War Room v1.7.28 - Remove dossier rune row'
+            'War Room v1.7.28 - Remove dossier rune row',
+            'War Room v1.7.28 - Live guild roster v25 current source',
+            "data.members||data.roster||[]",
+            "degraded?'SNAPSHOT'"
           )) { if (-not $html.Contains($required)) { throw "Integrated index missing $required" } }
 
       - name: Patch and compile native launcher
         shell: pwsh
         run: |
           python build/v178_launcher_patch.py
+          if ($LASTEXITCODE -ne 0) { throw "Native launcher patch failed with exit code $LASTEXITCODE" }
           $launcher = Get-Content build/WarRoomLauncher.cs -Raw
-          foreach ($required in @('/item-appearance','/modelviewer/','HandleItemAppearance','HandleModelViewerProxy','modelViewerProxy','itemAppearances')) {
+          foreach ($required in @(
+            '/item-appearance','/modelviewer/','HandleItemAppearance','HandleModelViewerProxy','modelViewerProxy','itemAppearances',
+            'https://classic-armory.org/api/v1/guild','classic-armory-current-post-api','PostJsonText','ClassicArmory.org'
+          )) {
             if (-not $launcher.Contains($required)) { throw "Patched launcher missing $required" }
           }
           $icon = (Resolve-Path "work/app/assets/icons/WarRoom.ico").Path
@@ -74,6 +81,20 @@ jobs:
           $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
           & $csc /nologo /target:winexe /optimize+ /reference:System.dll /reference:System.Windows.Forms.dll "/win32icon:$icon" "/out:$output" "$source"
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $output)) { throw "War Room.exe build failed." }
+
+      - name: Smoke test current ClassicArmory guild roster source
+        shell: pwsh
+        run: |
+          $payload = @{region='us';realm='dreamscythe';name='Me Not That Kind Of Orc';flavor='tbc-anniversary'} | ConvertTo-Json -Compress
+          $data = Invoke-RestMethod -Method Post -Uri 'https://classic-armory.org/api/v1/guild' -ContentType 'application/json' -Headers @{Accept='application/json';'User-Agent'='Mozilla/5.0 WarRoom-CI/1.7.28'} -Body $payload -TimeoutSec 30
+          if (-not $data.guild -or -not $data.roster) { throw 'ClassicArmory current guild API returned an unexpected payload' }
+          $level70 = @($data.roster | Where-Object { [int]$_.level -eq 70 })
+          if ($level70.Count -lt 10) { throw "ClassicArmory current guild API returned too few level 70s: $($level70.Count)" }
+          $names = @($data.roster | ForEach-Object { [string]$_.name })
+          "ClassicArmory guild updated_at=$($data.guild.updated_at); members=$($data.roster.Count); level70=$($level70.Count)" | Tee-Object -FilePath work/integration.log -Append | Out-Host
+          foreach ($n in @('Moanlet','Lolmopsfloor','Boomple')) {
+            "$n present=$($names -contains $n)" | Tee-Object -FilePath work/integration.log -Append | Out-Host
+          }
 
       - name: Edge smoke test actual Classic 3D through local proxy
         shell: pwsh
@@ -140,8 +161,11 @@ jobs:
           if (-not $h.Contains('Atomic per-character Inspect snapshots')) { throw 'Protected atomic Inspect snapshots missing' }
           if (-not $h.Contains("VIEWER_SRC='/modelviewer/live/viewer/viewer.min.js'")) { throw 'Live viewer runtime route missing' }
           if (-not $h.Contains('#drawer .dossier-runes{display:none!important}')) { throw 'Dossier rune row hide missing' }
+          if (-not $h.Contains('Live guild roster v25 current source')) { throw 'V25 current roster frontend marker missing' }
           if (-not $healthMarkers.Contains('modelViewerProxy')) { throw 'Native model proxy marker missing' }
           if (-not $healthMarkers.Contains('itemAppearances')) { throw 'Native appearance marker missing' }
+          if (-not $healthMarkers.Contains('classic-armory.org/api/v1/guild')) { throw 'V25 current ClassicArmory API missing' }
+          if (-not $healthMarkers.Contains('classic-armory-current-post-api')) { throw 'V25 current roster launcher marker missing' }
           Remove-Item work/app/WarRoomUpdater.log,work/app/WarRoomLauncher.log -ErrorAction SilentlyContinue
           Compress-Archive -Path work/app/* -DestinationPath work/WarRoom-v1.7.28-TEST.zip -Force
 
