@@ -16,6 +16,7 @@ live_roster_v21=here/'v178_live_roster_v21_patch.py'
 live_roster_v22=here/'v178_live_roster_v22_patch.py'
 live_roster_v23=here/'v178_live_roster_v23_patch.py'
 live_roster_v25=here/'v178_live_roster_v25_patch.py'
-for script in (core,gear,blend_probe,additive_rescue,roster_drag,wow_portraits,group_drag,group_drag_v17,raidframe_v18,raid_layout_v19,smooth_drag_v20,live_roster_v21,live_roster_v22,live_roster_v23,live_roster_v25):
+visual_v27=here/'v178_visual_v27_patch.py'
+for script in (core,gear,blend_probe,additive_rescue,roster_drag,wow_portraits,group_drag,group_drag_v17,raidframe_v18,raid_layout_v19,smooth_drag_v20,live_roster_v21,live_roster_v22,live_roster_v23,live_roster_v25,visual_v27):
     ns={'__name__':'__main__','__file__':str(script)}
     exec(compile(script.read_text(encoding='utf-8'),str(script),'exec'),ns,ns)
