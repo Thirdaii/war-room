@@ -1,0 +1,227 @@
+name: War Room v1.7.28 Test Build
+
+on:
+  push:
+    branches: [v1.7.28-model-proxy]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-artifact:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download production base without publishing
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force work/base,work/app | Out-Null
+          gh release download v1.7.25 --repo $env:GITHUB_REPOSITORY --pattern "WarRoom-App.zip" --dir work/base
+          Expand-Archive -Path work/base/WarRoom-App.zip -DestinationPath work/app -Force
+          if (-not (Test-Path work/app/index.html)) {
+            $dirs = @(Get-ChildItem work/app -Directory)
+            if ($dirs.Count -eq 1) {
+              Copy-Item "$($dirs[0].FullName)\*" work/app -Recurse -Force
+              Remove-Item $dirs[0].FullName -Recurse -Force
+            }
+          }
+          if (-not (Test-Path work/app/index.html)) { throw "Base package did not contain index.html." }
+
+      - name: Apply v1.7.28 integrations
+        shell: pwsh
+        run: |
+          $log = 'work/integration.log'
+          "War Room v1.7.28 integration diagnostics" | Set-Content $log
+          python build/patch.py work/app 2>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python build/v17_integrate.py work/app 2>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python build/v176_protected_integrate.py work/app 2>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python build/v178_integrate.py work/app 2>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python build/v178_viewer_hotfix.py work/app 2>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = (Get-Content build/version.txt -Raw).Trim()
+          $manifest = Get-Content work/app/version.json -Raw | ConvertFrom-Json
+          if ($manifest.version -ne $version) { throw "version.json mismatch: $($manifest.version) != $version" }
+          $html = Get-Content work/app/index.html -Raw
+          foreach ($required in @(
+            "VIEWER_SRC='/modelviewer/live/viewer/viewer.min.js'",
+            "CONTENT=location.origin+'/modelviewer/classic/'",
+            '/item-appearance?id=',
+            'War Room v1.7.26 - Atomic per-character Inspect snapshots',
+            'WarRoomInspectSnapshots','WarRoomCharacterModelManifest','wr-character-model-stage',
+            'window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined','generateModels(aspect',
+            'War Room v1.7.28 - Remove dossier rune row',
+            'War Room v1.7.28 - Live guild roster v25 current source',
+            "data.members||data.roster||[]",
+            "degraded?'SNAPSHOT'"
+          )) { if (-not $html.Contains($required)) { throw "Integrated index missing $required" } }
+
+      - name: Patch and compile native launcher
+        shell: pwsh
+        run: |
+          python build/v178_launcher_patch.py
+          if ($LASTEXITCODE -ne 0) { throw "Native launcher patch failed with exit code $LASTEXITCODE" }
+          $launcher = Get-Content build/WarRoomLauncher.cs -Raw
+          foreach ($required in @(
+            '/item-appearance','/modelviewer/','HandleItemAppearance','HandleModelViewerProxy','modelViewerProxy','itemAppearances',
+            'https://classic-armory.org/api/v1/guild','classic-armory-current-post-api','PostJsonText','ClassicArmory.org'
+          )) {
+            if (-not $launcher.Contains($required)) { throw "Patched launcher missing $required" }
+          }
+          $icon = (Resolve-Path "work/app/assets/icons/WarRoom.ico").Path
+          $source = (Resolve-Path "build/WarRoomLauncher.cs").Path
+          $output = (Join-Path (Resolve-Path "work/app").Path "War Room.exe")
+          $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $csc /nologo /target:winexe /optimize+ /reference:System.dll /reference:System.Windows.Forms.dll "/win32icon:$icon" "/out:$output" "$source"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $output)) { throw "War Room.exe build failed." }
+
+      - name: Smoke test current ClassicArmory guild roster source
+        shell: pwsh
+        run: |
+          $payload = @{region='us';realm='dreamscythe';name='Me Not That Kind Of Orc';flavor='tbc-anniversary'} | ConvertTo-Json -Compress
+          $data = Invoke-RestMethod -Method Post -Uri 'https://classic-armory.org/api/v1/guild' -ContentType 'application/json' -Headers @{Accept='application/json';'User-Agent'='Mozilla/5.0 WarRoom-CI/1.7.28'} -Body $payload -TimeoutSec 30
+          if (-not $data.guild -or -not $data.roster) { throw 'ClassicArmory current guild API returned an unexpected payload' }
+          $level70 = @($data.roster | Where-Object { [int]$_.level -eq 70 })
+          if ($level70.Count -lt 10) { throw "ClassicArmory current guild API returned too few level 70s: $($level70.Count)" }
+          $names = @($data.roster | ForEach-Object { [string]$_.name })
+          "ClassicArmory guild updated_at=$($data.guild.updated_at); members=$($data.roster.Count); level70=$($level70.Count)" | Tee-Object -FilePath work/integration.log -Append | Out-Host
+          foreach ($n in @('Moanlet','Lolmopsfloor','Boomple')) {
+            "$n present=$($names -contains $n)" | Tee-Object -FilePath work/integration.log -Append | Out-Host
+          }
+
+      - name: Smoke test compiled War Room live roster endpoint
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'work/app/War Room.exe').Path
+          $proc = Start-Process -FilePath $exe -ArgumentList '--app' -WorkingDirectory (Resolve-Path 'work/app').Path -PassThru
+          try {
+            $base = $null
+            for ($attempt=0; $attempt -lt 30 -and -not $base; $attempt++) {
+              foreach ($port in 43871..43919) {
+                try {
+                  $health = Invoke-WebRequest -Uri "http://127.0.0.1:$port/health" -UseBasicParsing -TimeoutSec 1
+                  if ($health.StatusCode -eq 200) { $base = "http://127.0.0.1:$port"; break }
+                } catch {}
+              }
+              if (-not $base) { Start-Sleep -Milliseconds 250 }
+            }
+            if (-not $base) { throw 'Compiled War Room local server did not start' }
+            $resp = Invoke-WebRequest -Uri "$base/guild-roster?refresh=1" -UseBasicParsing -TimeoutSec 45
+            $resp.Content | Set-Content work/native-roster-response.json -Encoding UTF8
+            $src = [string]$resp.Headers['X-WarRoom-Roster-Source']
+            "Native /guild-roster source=$src status=$($resp.StatusCode)" | Tee-Object -FilePath work/integration.log -Append | Out-Host
+            if ($src -ne 'ClassicArmory.org') { throw "Compiled War Room did not use current ClassicArmory source; source=$src body=$($resp.Content.Substring(0,[Math]::Min(800,$resp.Content.Length)))" }
+            $data = $resp.Content | ConvertFrom-Json
+            $roster = @($data.roster)
+            $level70 = @($roster | Where-Object { [int]$_.level -eq 70 })
+            $names = @($roster | ForEach-Object { [string]$_.name })
+            if ($level70.Count -lt 10) { throw "Compiled endpoint returned too few level 70s: $($level70.Count)" }
+            foreach ($n in @('Moanlet','Lolmopsfloor','Boomple')) {
+              if ($names -contains $n) { throw "Compiled endpoint incorrectly contains departed member $n" }
+            }
+          } finally {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Edge smoke test actual Classic 3D through local proxy
+        shell: pwsh
+        run: |
+          $edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+          if (-not (Test-Path $edge)) { $edge = "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe" }
+          if (-not (Test-Path $edge)) { throw 'Microsoft Edge not found on Windows runner' }
+
+          $server = @'
+          import http.server, urllib.request, urllib.error
+          PORT=43977
+          PAGE=r'''<!doctype html><html><head><meta charset="utf-8"></head><body data-smoke="WAIT"><div id="result">WAIT</div><div id="model" style="width:420px;height:420px"></div>
+          <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+          <script>window.CONTENT_PATH=location.origin+'/modelviewer/classic/';window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;</script>
+          <script src="/modelviewer/live/viewer/viewer.min.js"></script>
+          <script type="module">
+          const out=document.getElementById('result');
+          try {
+            const jq=typeof window.jQuery; let zam='undefined'; try{zam=typeof ZamModelViewer}catch(e){zam='ERR'};
+            const mod=await import('https://cdn.jsdelivr.net/npm/wow-model-viewer@1.5.3/index.js');
+            const viewer=await mod.generateModels(1,'#model',{race:5,gender:1,noCharCustomization:true,items:[]},'classic');
+            await new Promise(r=>setTimeout(r,3000));
+            const canvas=document.querySelector('#model canvas');
+            const ok=jq==='function'&&zam==='function'&&typeof mod.generateModels==='function'&&!!viewer&&!!canvas;
+            out.textContent='JQ='+jq+';ZAM='+zam+';GENERATE='+typeof mod.generateModels+';VIEWER='+typeof viewer+';CANVAS='+!!canvas;
+            document.body.setAttribute('data-smoke',ok?'PASS':'FAIL');
+          } catch(e) {out.textContent='ERROR='+String(e&&e.stack||e&&e.message||e);document.body.setAttribute('data-smoke','FAIL');}
+          </script></body></html>'''
+          class H(http.server.BaseHTTPRequestHandler):
+              def do_GET(self):
+                  if self.path=='/' or self.path.startswith('/?'):
+                      b=PAGE.encode(); self.send_response(200); self.send_header('Content-Type','text/html; charset=utf-8'); self.send_header('Content-Length',str(len(b))); self.end_headers(); self.wfile.write(b); return
+                  if self.path.startswith('/modelviewer/'):
+                      u='https://wow.zamimg.com'+self.path
+                      try:
+                          req=urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0','Referer':'https://www.wowhead.com/','Accept':'*/*'})
+                          with urllib.request.urlopen(req,timeout=20) as r:
+                              b=r.read(); self.send_response(r.status); self.send_header('Content-Type',r.headers.get('Content-Type','application/octet-stream')); self.send_header('Content-Length',str(len(b))); self.send_header('Access-Control-Allow-Origin','*'); self.end_headers(); self.wfile.write(b)
+                      except Exception as e:
+                          b=str(e).encode(); self.send_response(502); self.send_header('Content-Length',str(len(b))); self.end_headers(); self.wfile.write(b)
+                      return
+                  self.send_response(404); self.end_headers()
+              def log_message(self,fmt,*args): print(fmt%args,flush=True)
+          http.server.ThreadingHTTPServer(('127.0.0.1',PORT),H).serve_forever()
+          '@
+          Set-Content work/viewer_proxy_smoke.py $server -Encoding UTF8
+          $proc = Start-Process python -ArgumentList 'work/viewer_proxy_smoke.py' -PassThru -RedirectStandardOutput work/proxy-smoke.log -RedirectStandardError work/proxy-smoke.err
+          try {
+            Start-Sleep -Seconds 2
+            $dom = & $edge --headless=new --enable-webgl --use-angle=swiftshader --ignore-gpu-blocklist --virtual-time-budget=30000 --dump-dom http://127.0.0.1:43977/ 2>&1 | Out-String
+            $dom | Set-Content work/viewer-smoke-dom.txt
+            $dom | Tee-Object -FilePath work/integration.log -Append | Out-Host
+            Get-Content work/proxy-smoke.log -ErrorAction SilentlyContinue | Tee-Object -FilePath work/integration.log -Append | Out-Host
+            Get-Content work/proxy-smoke.err -ErrorAction SilentlyContinue | Tee-Object -FilePath work/integration.log -Append | Out-Host
+            if ($dom -notmatch 'data-smoke="PASS"') { throw 'Real Edge smoke test: actual Classic 3D model creation through same-origin proxy failed' }
+          } finally { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+
+      - name: Validate package contents
+        shell: pwsh
+        run: |
+          $h = Get-Content work/app/index.html -Raw
+          $healthMarkers = Get-Content build/WarRoomLauncher.cs -Raw
+          if (-not $h.Contains('wr-character-model-stage')) { throw 'Protected 3D stage missing' }
+          if (-not $h.Contains('Atomic per-character Inspect snapshots')) { throw 'Protected atomic Inspect snapshots missing' }
+          if (-not $h.Contains("VIEWER_SRC='/modelviewer/live/viewer/viewer.min.js'")) { throw 'Live viewer runtime route missing' }
+          if (-not $h.Contains('#drawer .dossier-runes{display:none!important}')) { throw 'Dossier rune row hide missing' }
+          if (-not $h.Contains('Live guild roster v25 current source')) { throw 'V25 current roster frontend marker missing' }
+          if (-not $healthMarkers.Contains('modelViewerProxy')) { throw 'Native model proxy marker missing' }
+          if (-not $healthMarkers.Contains('itemAppearances')) { throw 'Native appearance marker missing' }
+          if (-not $healthMarkers.Contains('classic-armory.org/api/v1/guild')) { throw 'V25 current ClassicArmory API missing' }
+          if (-not $healthMarkers.Contains('classic-armory-current-post-api')) { throw 'V25 current roster launcher marker missing' }
+          Remove-Item work/app/WarRoomUpdater.log,work/app/WarRoomLauncher.log -ErrorAction SilentlyContinue
+          Compress-Archive -Path work/app/* -DestinationPath work/WarRoom-v1.7.28-TEST.zip -Force
+
+      - name: Upload test artifact only
+        uses: actions/upload-artifact@v4
+        with:
+          name: WarRoom-v1.7.28-TEST
+          path: work/WarRoom-v1.7.28-TEST.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WarRoom-v1.7.28-DIAGNOSTICS
+          path: |
+            work/integration.log
+            work/native-roster-response.json
+            work/viewer-smoke-dom.txt
+            work/proxy-smoke.log
+            work/proxy-smoke.err
+            work/app/index.html
+          if-no-files-found: warn
+          retention-days: 2
