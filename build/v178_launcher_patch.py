@@ -3,6 +3,7 @@ from pathlib import Path
 here=Path(__file__).resolve().parent
 core=here/'v178_launcher_patch_core.py'
 extra=here/'v178_display_map_patch.py'
-for script in (core,extra):
+live_roster=here/'v178_live_roster_launcher_patch.py'
+for script in (core,extra,live_roster):
     ns={'__name__':'__main__','__file__':str(script)}
     exec(compile(script.read_text(encoding='utf-8'),str(script),'exec'),ns,ns)
